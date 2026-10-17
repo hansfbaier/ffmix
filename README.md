@@ -77,6 +77,19 @@ ffmix
 You need a Rust toolchain, Linux `firewire-core`, and permission to open the Fireface's
 `/dev/fw*` node (normally your user is in the `audio` group).
 
+### Arch Linux package
+
+A `PKGBUILD` and generated `.SRCINFO` live in [`packaging/arch`](packaging/arch):
+
+```sh
+cd packaging/arch
+makepkg -si
+```
+
+The package installs the binary, desktop entry, icon, license and documentation. A
+prebuilt `ffmix-0.1.1-1-x86_64.pkg.tar.zst` is attached to the
+[v0.1.0 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.1).
+
 <details>
 <summary><b>Build dependencies</b></summary>
 
@@ -133,14 +146,15 @@ quits.
   not the device configuration.
 - **Matrix** — inputs → outputs and playback → outputs, 14 × 14 cells. Click toggles
   between 0 dB and -∞, scroll adjusts ±0.5 dB, right-click clears. Arrow keys move the
-  selection, `Enter` toggles, `Backspace` clears, `+`/`-` trim. Columns meter sources,
-  rows meter outputs, and active cells glow and grow a bottom activity bed; hover any
-  cell for source, send, crosspoint and output dBFS.
+  selection, `Enter` toggles, `Backspace` clears, `+`/`-` trim. Rows are sources and
+  columns are outputs, as in TotalMix. Rows meter sources, columns meter outputs, and
+  active cells glow and grow a bottom activity bed; hover any cell for source, send,
+  crosspoint and output dBFS.
 
 ### Matrix metering
 
-The matrix is also a live display. A thin bar under each column head shows that source
-pair's level, and a vertical bar beside each row shows that output pair's post-master
+The matrix is also a live display. A thin bar under each column head shows that output
+pair's post-master level, and a vertical bar beside each row shows that source pair's
 level; both include peak hold and clip caps. Each crosspoint tints and grows a bottom
 activity bar from the source level times its actual routed gain, with mute, solo, pan
 and stereo links folded in, so the signal visibly travels from the active column into

@@ -1,6 +1,6 @@
 [package]
 name = "ffmix"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Independent TotalMix FX-style mixer and tray app for the RME Fireface 800 on Linux (not affiliated with RME)"
 license = "MIT"

@@ -1103,7 +1103,11 @@ impl App {
                     self.mark_config();
                 }
             }
-            ui.label(egui::RichText::new("TO OUTPUTS").size(10.0).color(MUTED));
+            ui.label(
+                egui::RichText::new("ROWS = SOURCES · COLS = OUTPUTS")
+                    .size(10.0)
+                    .color(MUTED),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     egui::RichText::new("Click toggles 0 dB / -∞ · scroll ±0.5 dB · right-click clears")
@@ -1138,10 +1142,17 @@ impl App {
         painter.rect_filled(grid_rect, 6.0, PANEL);
         painter.rect_stroke(grid_rect, 6.0, Stroke::new(1.0_f32, BORDER), StrokeKind::Inside);
 
-        // column headers: source level, one bar per source pair
-        for p in 0..npairs {
-            let x = gx + p as f32 * cw;
-            let label = short_pair(self.matrix_kind, p);
+        // column headers: outputs, one level bar per output pair
+        painter.text(
+            Pos2::new(grid_rect.left() + 8.0, grid_rect.top() + 4.0),
+            Align2::LEFT_TOP,
+            "SOURCE",
+            FontId::proportional(8.0),
+            MUTED,
+        );
+        for op in 0..npairs {
+            let x = gx + op as f32 * cw;
+            let label = pair_label(Kind::Out, op);
             painter.text(
                 Pos2::new(x + cw * 0.5, grid_rect.top() + 4.0),
                 Align2::CENTER_TOP,
@@ -1149,54 +1160,23 @@ impl App {
                 FontId::proportional(8.0),
                 MUTED,
             );
-            let level = source_meters.level[2 * p].max(source_meters.level[2 * p + 1]);
-            let hold = source_meters.hold[2 * p].max(source_meters.hold[2 * p + 1]);
-            let clip = source_meters.clip[2 * p] || source_meters.clip[2 * p + 1];
-            let meter_rect = Rect::from_min_size(
-                Pos2::new(x + 4.0, grid_rect.top() + 17.0),
-                Vec2::new((cw - 8.0).max(6.0), 4.0),
-            );
-            draw_h_meter(&painter, meter_rect, level, hold, clip, source_color);
-            let resp = ui.interact(
-                meter_rect,
-                Id::new(("mx-src-meter", self.matrix_kind, p)),
-                Sense::click(),
-            );
-            if resp.clicked() {
-                match self.matrix_kind {
-                    Kind::In => self.meters.input.reset_pair(p),
-                    Kind::Play => self.meters.playback.reset_pair(p),
-                    Kind::Out => {}
-                }
-            }
-            if resp.hovered() {
-                resp.on_hover_text(format!(
-                    "{} source\nLevel  {}\nPeak  {}{}\nClick to reset peak",
-                    pair_label(self.matrix_kind, p),
-                    fmt_level(level),
-                    fmt_level(hold),
-                    if clip { "\nCLIP" } else { "" }
-                ));
-            }
-        }
-        // row headers: output level, one bar per output pair
-        for op in 0..npairs {
-            let y = gy + op as f32 * ch;
-            painter.text(
-                Pos2::new(gx - 15.0, y + ch * 0.5),
-                Align2::RIGHT_CENTER,
-                pair_label(Kind::Out, op),
-                FontId::proportional(8.2),
-                MUTED,
-            );
             let level = output_meters.level[2 * op].max(output_meters.level[2 * op + 1]);
             let hold = output_meters.hold[2 * op].max(output_meters.hold[2 * op + 1]);
             let clip = output_meters.clip[2 * op] || output_meters.clip[2 * op + 1];
             let meter_rect = Rect::from_min_size(
-                Pos2::new(gx - 9.0, y + 3.0),
-                Vec2::new(4.0, (ch - 6.0).max(6.0)),
+                Pos2::new(x + 4.0, grid_rect.top() + 17.0),
+                Vec2::new((cw - 8.0).max(6.0), 4.0),
             );
-            draw_v_meter(&painter, meter_rect, level, hold, clip, widgets::KIND_OUT);
+            draw_h_meter(&painter, meter_rect, level, hold, clip, widgets::KIND_OUT);
+            if cw >= 36.0 && level > 0.001 {
+                painter.text(
+                    Pos2::new(x + cw * 0.5, grid_rect.top() + 23.0),
+                    Align2::CENTER_TOP,
+                    fmt_level_short(level),
+                    FontId::proportional(7.0),
+                    MUTED,
+                );
+            }
             let resp = ui.interact(meter_rect, Id::new(("mx-out-meter", op)), Sense::click());
             if resp.clicked() {
                 self.meters.output.reset_pair(op);
@@ -1210,17 +1190,67 @@ impl App {
                     if clip { "\nCLIP" } else { "" }
                 ));
             }
-            for p in 0..npairs {
-                let x = gx + p as f32 * cw;
+        }
+        // row headers + cells: sources are rows, outputs are columns
+        for sp in 0..npairs {
+            let y = gy + sp as f32 * ch;
+            let label_y = if ch >= 30.0 { y + ch * 0.5 - 6.0 } else { y + ch * 0.5 };
+            painter.text(
+                Pos2::new(gx - 15.0, label_y),
+                Align2::RIGHT_CENTER,
+                pair_label(self.matrix_kind, sp),
+                FontId::proportional(8.2),
+                MUTED,
+            );
+            let level = source_meters.level[2 * sp].max(source_meters.level[2 * sp + 1]);
+            let hold = source_meters.hold[2 * sp].max(source_meters.hold[2 * sp + 1]);
+            let clip = source_meters.clip[2 * sp] || source_meters.clip[2 * sp + 1];
+            if ch >= 30.0 && level > 0.001 {
+                painter.text(
+                    Pos2::new(gx - 15.0, y + ch * 0.5 + 6.0),
+                    Align2::RIGHT_CENTER,
+                    fmt_level_short(level),
+                    FontId::proportional(7.0),
+                    MUTED,
+                );
+            }
+            let meter_rect = Rect::from_min_size(
+                Pos2::new(gx - 9.0, y + 3.0),
+                Vec2::new(4.0, (ch - 6.0).max(6.0)),
+            );
+            draw_v_meter(&painter, meter_rect, level, hold, clip, source_color);
+            let resp = ui.interact(
+                meter_rect,
+                Id::new(("mx-src-meter", self.matrix_kind, sp)),
+                Sense::click(),
+            );
+            if resp.clicked() {
+                match self.matrix_kind {
+                    Kind::In => self.meters.input.reset_pair(sp),
+                    Kind::Play => self.meters.playback.reset_pair(sp),
+                    Kind::Out => {}
+                }
+            }
+            if resp.hovered() {
+                resp.on_hover_text(format!(
+                    "{} source\nLevel  {}\nPeak  {}{}\nClick to reset peak",
+                    pair_label(self.matrix_kind, sp),
+                    fmt_level(level),
+                    fmt_level(hold),
+                    if clip { "\nCLIP" } else { "" }
+                ));
+            }
+            for op in 0..npairs {
+                let x = gx + op as f32 * cw;
                 let cell = Rect::from_min_size(Pos2::new(x, y), Vec2::new(cw - 1.0, ch - 1.0));
-                let (db, db2) = self.matrix_cell(self.matrix_kind, p, op);
+                let (db, db2) = self.matrix_cell(self.matrix_kind, sp, op);
                 let db = match (db, db2) {
                     (None, None) => None,
                     (a, b) => Some(a.unwrap_or(-80.0).max(b.unwrap_or(-80.0))),
                 };
-                let selected = self.matrix_selected == Some((op, p));
+                let selected = self.matrix_selected == Some((sp, op));
                 let fill = cell_color(db);
-                let live = matrix_cell_live(&matrix_gains, self.matrix_kind, p, op, &source_meters);
+                let live = matrix_cell_live(&matrix_gains, self.matrix_kind, sp, op, &source_meters);
                 let activity = widgets::meter_frac(live);
                 painter.rect_filled(cell, 2.0, fill);
                 if activity > 0.005 {
@@ -1264,17 +1294,17 @@ impl App {
                 }
                 let resp = ui.interact(
                     cell,
-                    Id::new(("mx", self.matrix_kind, op, p)),
+                    Id::new(("mx", self.matrix_kind, sp, op)),
                     Sense::click_and_drag(),
                 );
                 if resp.clicked() {
-                    self.matrix_selected = Some((op, p));
+                    self.matrix_selected = Some((sp, op));
                     let new = if db.is_some() { None } else { Some(0.0) };
-                    self.set_matrix_cell(self.matrix_kind, p, op, new);
+                    self.set_matrix_cell(self.matrix_kind, sp, op, new);
                 }
                 if resp.secondary_clicked() {
-                    self.matrix_selected = Some((op, p));
-                    self.set_matrix_cell(self.matrix_kind, p, op, None);
+                    self.matrix_selected = Some((sp, op));
+                    self.set_matrix_cell(self.matrix_kind, sp, op, None);
                 }
                 if resp.hovered() {
                     let scroll = ui.input(|i| i.raw_scroll_delta.y);
@@ -1283,7 +1313,7 @@ impl App {
                         let new = if scroll > 0.0 { (base + 0.5).min(6.0) } else { (base - 0.5).max(-80.0) };
                         self.set_matrix_cell(
                             self.matrix_kind,
-                            p,
+                            sp,
                             op,
                             if new <= -80.0 { None } else { Some(new) },
                         );
@@ -1296,23 +1326,23 @@ impl App {
                         let new = (base - dy * 0.2).clamp(-80.0, 6.0);
                         self.set_matrix_cell(
                             self.matrix_kind,
-                            p,
+                            sp,
                             op,
                             if new <= -80.0 { None } else { Some(new) },
                         );
                     }
                 }
                 if resp.clicked() || resp.secondary_clicked() {
-                    self.matrix_selected = Some((op, p));
+                    self.matrix_selected = Some((sp, op));
                 }
                 if resp.hovered() {
                     let source_level =
-                        source_meters.level[2 * p].max(source_meters.level[2 * p + 1]);
+                        source_meters.level[2 * sp].max(source_meters.level[2 * sp + 1]);
                     let output_level =
                         output_meters.level[2 * op].max(output_meters.level[2 * op + 1]);
                     resp.on_hover_text(format!(
                         "{} -> {}\nSource  {}\nSend gain  {}\nCrosspoint  {} (est., pre-master)\nOutput  {} (post-master)",
-                        pair_label(self.matrix_kind, p),
+                        pair_label(self.matrix_kind, sp),
                         pair_label(Kind::Out, op),
                         fmt_level(source_level),
                         fmt_db(db),
@@ -1330,15 +1360,15 @@ impl App {
         );
         ui.scope_builder(egui::UiBuilder::new().max_rect(inspector), |ui| {
             ui.horizontal(|ui| {
-                if let Some((op, p)) = self.matrix_selected {
-                    let src_name = pair_label(self.matrix_kind, p);
+                if let Some((sp, op)) = self.matrix_selected {
+                    let src_name = pair_label(self.matrix_kind, sp);
                     let out_name = pair_label(Kind::Out, op);
                     ui.label(
-                        egui::RichText::new(format!("{out_name}  ←  {src_name}"))
+                        egui::RichText::new(format!("{out_name}  <-  {src_name}"))
                             .size(11.5)
                             .color(TEXT),
                     );
-                    let (a, b) = self.matrix_cell(self.matrix_kind, p, op);
+                    let (a, b) = self.matrix_cell(self.matrix_kind, sp, op);
                     let cur = a.or(b).unwrap_or(-80.0);
                     let mut v = cur.max(-80.0);
                     let changed = ui
@@ -1350,13 +1380,13 @@ impl App {
                         )
                         .changed();
                     if changed {
-                        self.set_matrix_cell(self.matrix_kind, p, op, Some(v));
+                        self.set_matrix_cell(self.matrix_kind, sp, op, Some(v));
                     }
                     if ui.button("0 dB").clicked() {
-                        self.set_matrix_cell(self.matrix_kind, p, op, Some(0.0));
+                        self.set_matrix_cell(self.matrix_kind, sp, op, Some(0.0));
                     }
                     if ui.button("-∞").clicked() {
-                        self.set_matrix_cell(self.matrix_kind, p, op, None);
+                        self.set_matrix_cell(self.matrix_kind, sp, op, None);
                     }
                 } else {
                     ui.label(
@@ -1972,45 +2002,45 @@ impl eframe::App for App {
         if self.tab == Tab::Matrix && !ctrl && !ctx.input(|i| i.modifiers.shift) {
             let mode = speed_mode(self.status.rate);
             let npairs = (channels(self.matrix_kind, mode).len() / 2).max(1).min(N_PAIRS);
-            let (mut op, mut sp) = self.matrix_selected.unwrap_or((0, 0));
+            let (mut sp, mut op) = self.matrix_selected.unwrap_or((0, 0));
             let key = |k| ctx.input(|i| i.key_pressed(k));
             let mut moved = false;
             if key(egui::Key::ArrowLeft) {
-                sp = (sp + npairs - 1) % npairs;
-                moved = true;
-            }
-            if key(egui::Key::ArrowRight) {
-                sp = (sp + 1) % npairs;
-                moved = true;
-            }
-            if key(egui::Key::ArrowUp) {
                 op = (op + npairs - 1) % npairs;
                 moved = true;
             }
-            if key(egui::Key::ArrowDown) {
+            if key(egui::Key::ArrowRight) {
                 op = (op + 1) % npairs;
                 moved = true;
             }
+            if key(egui::Key::ArrowUp) {
+                sp = (sp + npairs - 1) % npairs;
+                moved = true;
+            }
+            if key(egui::Key::ArrowDown) {
+                sp = (sp + 1) % npairs;
+                moved = true;
+            }
             if moved {
-                self.matrix_selected = Some((op, sp));
+                self.matrix_selected = Some((sp, op));
             }
             let (a, b) = self.matrix_cell(self.matrix_kind, sp, op);
             if key(egui::Key::Enter) || key(egui::Key::Space) {
-                self.matrix_selected = Some((op, sp));
+                self.matrix_selected = Some((sp, op));
                 let new = if a.is_some() || b.is_some() { None } else { Some(0.0) };
                 self.set_matrix_cell(self.matrix_kind, sp, op, new);
             }
             if key(egui::Key::Backspace) || key(egui::Key::Delete) {
-                self.matrix_selected = Some((op, sp));
+                self.matrix_selected = Some((sp, op));
                 self.set_matrix_cell(self.matrix_kind, sp, op, None);
             }
             if key(egui::Key::Plus) || key(egui::Key::Equals) {
-                self.matrix_selected = Some((op, sp));
+                self.matrix_selected = Some((sp, op));
                 let cur = a.or(b).unwrap_or(-80.0);
                 self.set_matrix_cell(self.matrix_kind, sp, op, Some((cur + 0.5).min(6.0)));
             }
             if key(egui::Key::Minus) {
-                self.matrix_selected = Some((op, sp));
+                self.matrix_selected = Some((sp, op));
                 let cur = a.or(b).unwrap_or(-80.0);
                 let new = (cur - 0.5).max(-80.0);
                 self.set_matrix_cell(
@@ -2141,7 +2171,7 @@ fn live_badge(ui: &mut egui::Ui, active: bool) {
         if active { TEXT } else { MUTED },
     );
     resp.on_hover_text(
-        "Columns meter sources, rows meter outputs.\nCell glow estimates source x routed gain before the output master.",
+        "Rows meter sources, columns meter outputs.\nCell glow estimates source x routed gain before the output master.",
     );
 }
 
@@ -2226,8 +2256,11 @@ fn fmt_level(lin: f32) -> String {
     }
 }
 
-fn short_pair(kind: Kind, pair: usize) -> String {
-    pair_label(kind, pair).replace(' ', "")
+fn fmt_level_short(lin: f32) -> String {
+    match lin2db(lin) {
+        Some(db) => format!("{db:.0}"),
+        None => "-∞".to_owned(),
+    }
 }
 
 fn cell_color(db: Option<f32>) -> Color32 {
