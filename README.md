@@ -93,8 +93,8 @@ makepkg -si
 ```
 
 The package installs the binary, desktop entry, icon, license and documentation. A
-prebuilt `ffmix-0.1.2-1-x86_64.pkg.tar.zst` is attached to the
-[v0.1.2 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.2).
+prebuilt `ffmix-0.1.3-1-x86_64.pkg.tar.zst` is attached to the
+[v0.1.3 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.3).
 
 <details>
 <summary><b>Build dependencies</b></summary>
@@ -144,7 +144,8 @@ quits.
 - **Pan, mute, solo, stereo link** — per-source pan and mute are folded into the gain
   matrix; solo is solo-in-place in the selected submix, like TotalMix.
 - **Meters** — real hardware values with 26 dB/s release, 1.5 s peak hold, numeric peak
-  readout and clip LEDs. Click a meter to reset its peak.
+  readout and clip LEDs. Mixer strips use wide stereo VU bars; click a meter to reset
+  its peak.
 - **Fader groups** — right-click a strip and assign one of four groups; grouped faders
   follow relative dB moves.
 - **Presets** — eight slots. `F1`…`F8` recall, `Shift+F1`…`F8` store, or use the

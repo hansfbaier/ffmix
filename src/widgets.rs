@@ -342,8 +342,8 @@ pub fn meter(
     let response = ui.interact(rect, id, Sense::click());
     let painter = ui.painter().with_clip_rect(rect);
     let channels = levels.len().max(1);
-    let bar_w = 4.0;
     let gap = 2.0;
+    let bar_w = ((rect.width() - gap * (channels - 1) as f32) / channels as f32).max(4.0);
     let total_w = channels as f32 * bar_w + (channels - 1) as f32 * gap;
     let x0 = rect.center().x - total_w / 2.0;
 

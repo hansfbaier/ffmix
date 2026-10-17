@@ -1012,7 +1012,13 @@ impl App {
             top_of_fader += 35.0;
         }
 
-        let meter_w = if rect.width() >= 38.0 { 8.0 } else { 6.0 };
+        let meter_w = if rect.width() >= 48.0 {
+            20.0
+        } else if rect.width() >= 35.0 {
+            16.0
+        } else {
+            12.0
+        };
         let fader_w = (rect.width() - meter_w - 6.0).clamp(13.0, 21.0);
         let fader_rect = Rect::from_min_max(
             Pos2::new(rect.left() + 2.0, top_of_fader),
