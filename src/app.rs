@@ -15,7 +15,7 @@ use crate::ff800::{
 };
 use crate::model::{
     chan_label, channels, db2pos, fmt_db, lin2db, pair_label, speed_mode, Kind, Mix, MixState,
-    PresetBank, N_IN, N_OUT, N_PAIRS, N_PLAY, N_SLOTS,
+    PresetBank, N_IN, N_OUT, N_PAIRS, N_PLAY, N_SLOTS, N_SRC,
 };
 use crate::persist::{self, AppConfig};
 use crate::tray::{self, UiCmd};
@@ -106,6 +106,26 @@ impl MeterBank {
             self.hold_at[channel] = Instant::now();
         }
     }
+
+    fn reset_pair(&mut self, pair: usize) {
+        self.reset(pair * 2);
+        self.reset(pair * 2 + 1);
+    }
+
+    fn snapshot(&self) -> MeterSnapshot {
+        MeterSnapshot {
+            level: self.level,
+            hold: self.hold,
+            clip: self.clip,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MeterSnapshot {
+    level: [f32; N_OUT],
+    hold: [f32; N_OUT],
+    clip: [bool; N_OUT],
 }
 
 struct Meters {
@@ -1066,6 +1086,14 @@ impl App {
     // ------------------------------------------------------------ matrix
 
     fn matrix_view(&mut self, ui: &mut egui::Ui) {
+        let live_any = self
+            .meters
+            .input
+            .level
+            .iter()
+            .chain(self.meters.playback.level.iter())
+            .chain(self.meters.output.level.iter())
+            .any(|&v| widgets::meter_frac(v) > 0.08);
         let mode = speed_mode(self.status.rate);
         ui.horizontal(|ui| {
             for (kind, label) in [(Kind::In, "INPUTS"), (Kind::Play, "PLAYBACK")] {
@@ -1075,13 +1103,15 @@ impl App {
                     self.mark_config();
                 }
             }
-            ui.label(egui::RichText::new("→ OUTPUTS").size(10.0).color(MUTED));
+            ui.label(egui::RichText::new("TO OUTPUTS").size(10.0).color(MUTED));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     egui::RichText::new("Click toggles 0 dB / -∞ · scroll ±0.5 dB · right-click clears")
                         .size(9.5)
                         .color(MUTED),
                 );
+                ui.add_space(10.0);
+                live_badge(ui, live_any);
             });
         });
         ui.add_space(6.0);
@@ -1093,6 +1123,10 @@ impl App {
         );
         let chans = channels(self.matrix_kind, mode);
         let npairs = (chans.len() / 2).max(1).min(N_PAIRS);
+        let source_meters = self.meters.bank(self.matrix_kind).snapshot();
+        let output_meters = self.meters.output.snapshot();
+        let matrix_gains = self.mix.compute_matrix(true);
+        let source_color = widgets::kind_color(self.matrix_kind);
         let left_w = 74.0;
         let top_h = 46.0;
         let cw = ((grid_rect.width() - left_w - 8.0) / npairs as f32).clamp(22.0, 112.0);
@@ -1104,7 +1138,7 @@ impl App {
         painter.rect_filled(grid_rect, 6.0, PANEL);
         painter.rect_stroke(grid_rect, 6.0, Stroke::new(1.0_f32, BORDER), StrokeKind::Inside);
 
-        // column headers
+        // column headers: source level, one bar per source pair
         for p in 0..npairs {
             let x = gx + p as f32 * cw;
             let label = short_pair(self.matrix_kind, p);
@@ -1115,17 +1149,67 @@ impl App {
                 FontId::proportional(8.0),
                 MUTED,
             );
+            let level = source_meters.level[2 * p].max(source_meters.level[2 * p + 1]);
+            let hold = source_meters.hold[2 * p].max(source_meters.hold[2 * p + 1]);
+            let clip = source_meters.clip[2 * p] || source_meters.clip[2 * p + 1];
+            let meter_rect = Rect::from_min_size(
+                Pos2::new(x + 4.0, grid_rect.top() + 17.0),
+                Vec2::new((cw - 8.0).max(6.0), 4.0),
+            );
+            draw_h_meter(&painter, meter_rect, level, hold, clip, source_color);
+            let resp = ui.interact(
+                meter_rect,
+                Id::new(("mx-src-meter", self.matrix_kind, p)),
+                Sense::click(),
+            );
+            if resp.clicked() {
+                match self.matrix_kind {
+                    Kind::In => self.meters.input.reset_pair(p),
+                    Kind::Play => self.meters.playback.reset_pair(p),
+                    Kind::Out => {}
+                }
+            }
+            if resp.hovered() {
+                resp.on_hover_text(format!(
+                    "{} source\nLevel  {}\nPeak  {}{}\nClick to reset peak",
+                    pair_label(self.matrix_kind, p),
+                    fmt_level(level),
+                    fmt_level(hold),
+                    if clip { "\nCLIP" } else { "" }
+                ));
+            }
         }
-        // row headers + cells
+        // row headers: output level, one bar per output pair
         for op in 0..npairs {
             let y = gy + op as f32 * ch;
             painter.text(
-                Pos2::new(gx - 6.0, y + ch * 0.5),
+                Pos2::new(gx - 15.0, y + ch * 0.5),
                 Align2::RIGHT_CENTER,
                 pair_label(Kind::Out, op),
                 FontId::proportional(8.2),
                 MUTED,
             );
+            let level = output_meters.level[2 * op].max(output_meters.level[2 * op + 1]);
+            let hold = output_meters.hold[2 * op].max(output_meters.hold[2 * op + 1]);
+            let clip = output_meters.clip[2 * op] || output_meters.clip[2 * op + 1];
+            let meter_rect = Rect::from_min_size(
+                Pos2::new(gx - 9.0, y + 3.0),
+                Vec2::new(4.0, (ch - 6.0).max(6.0)),
+            );
+            draw_v_meter(&painter, meter_rect, level, hold, clip, widgets::KIND_OUT);
+            let resp = ui.interact(meter_rect, Id::new(("mx-out-meter", op)), Sense::click());
+            if resp.clicked() {
+                self.meters.output.reset_pair(op);
+            }
+            if resp.hovered() {
+                resp.on_hover_text(format!(
+                    "{} output\nLevel  {}\nPeak  {}{}\nClick to reset peak",
+                    pair_label(Kind::Out, op),
+                    fmt_level(level),
+                    fmt_level(hold),
+                    if clip { "\nCLIP" } else { "" }
+                ));
+            }
             for p in 0..npairs {
                 let x = gx + p as f32 * cw;
                 let cell = Rect::from_min_size(Pos2::new(x, y), Vec2::new(cw - 1.0, ch - 1.0));
@@ -1136,7 +1220,33 @@ impl App {
                 };
                 let selected = self.matrix_selected == Some((op, p));
                 let fill = cell_color(db);
+                let live = matrix_cell_live(&matrix_gains, self.matrix_kind, p, op, &source_meters);
+                let activity = widgets::meter_frac(live);
                 painter.rect_filled(cell, 2.0, fill);
+                if activity > 0.005 {
+                    // The FF800 does not expose per-crosspoint meters. This is the
+                    // source level times the routed gain (mute/solo/pan folded in),
+                    // before the output master.
+                    painter.rect_filled(cell, 2.0, blend(fill, source_color, 0.68 * activity));
+                    let track = Rect::from_min_max(
+                        Pos2::new(cell.min.x + 3.0, cell.max.y - 5.0),
+                        Pos2::new(cell.max.x - 3.0, cell.max.y - 2.0),
+                    );
+                    if track.width() > 0.0 {
+                        painter.rect_filled(track, 1.0, Color32::from_rgb(0x0b, 0x0d, 0x0f));
+                        let filled = track.width() * activity;
+                        if filled > 0.3 {
+                            painter.rect_filled(
+                                Rect::from_min_max(
+                                    track.min,
+                                    Pos2::new(track.min.x + filled, track.max.y),
+                                ),
+                                1.0,
+                                blend(source_color, Color32::WHITE, 0.22),
+                            );
+                        }
+                    }
+                }
                 painter.rect_stroke(
                     cell,
                     2.0,
@@ -1194,6 +1304,21 @@ impl App {
                 }
                 if resp.clicked() || resp.secondary_clicked() {
                     self.matrix_selected = Some((op, p));
+                }
+                if resp.hovered() {
+                    let source_level =
+                        source_meters.level[2 * p].max(source_meters.level[2 * p + 1]);
+                    let output_level =
+                        output_meters.level[2 * op].max(output_meters.level[2 * op + 1]);
+                    resp.on_hover_text(format!(
+                        "{} -> {}\nSource  {}\nSend gain  {}\nCrosspoint  {} (est., pre-master)\nOutput  {} (post-master)",
+                        pair_label(self.matrix_kind, p),
+                        pair_label(Kind::Out, op),
+                        fmt_level(source_level),
+                        fmt_db(db),
+                        fmt_level(live),
+                        fmt_level(output_level),
+                    ));
                 }
             }
         }
@@ -1974,6 +2099,133 @@ fn rate_text(rate: Option<u32>) -> String {
     }
 }
 
+fn matrix_cell_live(
+    gains: &[[f32; N_SRC]; N_OUT],
+    kind: Kind,
+    src_pair: usize,
+    out_pair: usize,
+    source: &MeterSnapshot,
+) -> f32 {
+    let base = match kind {
+        Kind::In => 0,
+        Kind::Play => N_IN,
+        Kind::Out => return 0.0,
+    };
+    let c0 = src_pair * 2;
+    let mut peak = 0.0f32;
+    for c in [c0, c0 + 1] {
+        let src = base + c;
+        let level = source.level.get(c).copied().unwrap_or(0.0);
+        for out in [2 * out_pair, 2 * out_pair + 1] {
+            peak = peak.max(level * gains[out][src]);
+        }
+    }
+    peak.clamp(0.0, 2.0)
+}
+
+fn live_badge(ui: &mut egui::Ui, active: bool) {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(48.0, 16.0), Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, 8.0, PANEL2);
+    painter.rect_stroke(rect, 8.0, Stroke::new(1.0_f32, BORDER), StrokeKind::Inside);
+    painter.circle_filled(
+        Pos2::new(rect.min.x + 9.0, rect.center().y),
+        2.2,
+        if active { GREEN } else { DIMTEXT },
+    );
+    painter.text(
+        Pos2::new(rect.min.x + 15.0, rect.center().y),
+        Align2::LEFT_CENTER,
+        "LIVE",
+        FontId::proportional(8.5),
+        if active { TEXT } else { MUTED },
+    );
+    resp.on_hover_text(
+        "Columns meter sources, rows meter outputs.\nCell glow estimates source x routed gain before the output master.",
+    );
+}
+
+fn draw_v_meter(
+    painter: &egui::Painter,
+    rect: Rect,
+    level: f32,
+    hold: f32,
+    clip: bool,
+    color: Color32,
+) {
+    painter.rect_filled(rect, 1.0, Color32::from_rgb(0x0b, 0x0d, 0x0f));
+    let frac = widgets::meter_frac(level);
+    if frac > 0.0 {
+        painter.rect_filled(
+            Rect::from_min_max(
+                Pos2::new(rect.min.x, rect.max.y - rect.height() * frac),
+                rect.max,
+            ),
+            1.0,
+            color,
+        );
+    }
+    let hold_frac = widgets::meter_frac(hold);
+    if hold_frac > 0.0 {
+        let y = rect.max.y - rect.height() * hold_frac;
+        painter.line_segment(
+            [Pos2::new(rect.min.x, y), Pos2::new(rect.max.x, y)],
+            Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 255, 255, 190)),
+        );
+    }
+    if clip {
+        painter.rect_filled(
+            Rect::from_min_max(rect.min, Pos2::new(rect.max.x, rect.min.y + 2.0)),
+            0.5,
+            RED,
+        );
+    }
+}
+
+fn draw_h_meter(
+    painter: &egui::Painter,
+    rect: Rect,
+    level: f32,
+    hold: f32,
+    clip: bool,
+    color: Color32,
+) {
+    painter.rect_filled(rect, 1.0, Color32::from_rgb(0x0b, 0x0d, 0x0f));
+    let frac = widgets::meter_frac(level);
+    if frac > 0.0 {
+        painter.rect_filled(
+            Rect::from_min_max(
+                rect.min,
+                Pos2::new(rect.min.x + rect.width() * frac, rect.max.y),
+            ),
+            1.0,
+            color,
+        );
+    }
+    let hold_frac = widgets::meter_frac(hold);
+    if hold_frac > 0.0 {
+        let x = rect.min.x + rect.width() * hold_frac;
+        painter.line_segment(
+            [Pos2::new(x, rect.min.y), Pos2::new(x, rect.max.y)],
+            Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(255, 255, 255, 190)),
+        );
+    }
+    if clip {
+        painter.rect_filled(
+            Rect::from_min_max(Pos2::new(rect.max.x - 2.0, rect.min.y), rect.max),
+            0.5,
+            RED,
+        );
+    }
+}
+
+fn fmt_level(lin: f32) -> String {
+    match lin2db(lin) {
+        Some(db) => format!("{db:.1} dBFS"),
+        None => "-∞".to_owned(),
+    }
+}
+
 fn short_pair(kind: Kind, pair: usize) -> String {
     pair_label(kind, pair).replace(' ', "")
 }
@@ -2001,4 +2253,25 @@ fn checkbox(ui: &mut egui::Ui, value: &mut bool, label: &str) -> bool {
     let before = *value;
     ui.checkbox(value, egui::RichText::new(label).size(10.5));
     before != *value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cell_live_uses_source_base_and_both_output_legs() {
+        let mut source = MeterSnapshot {
+            level: [0.0; N_OUT],
+            hold: [0.0; N_OUT],
+            clip: [false; N_OUT],
+        };
+        source.level[0] = 0.5;
+        let mut gains = [[0.0; N_SRC]; N_OUT];
+        gains[0][0] = 0.25;
+        gains[1][N_IN] = 0.5;
+
+        assert_eq!(matrix_cell_live(&gains, Kind::In, 0, 0, &source), 0.125);
+        assert_eq!(matrix_cell_live(&gains, Kind::Play, 0, 0, &source), 0.25);
+    }
 }

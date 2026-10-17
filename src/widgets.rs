@@ -317,7 +317,7 @@ pub fn knob_text(pan: f32) -> String {
     pan_text(pan)
 }
 
-fn meter_frac(lin: f32) -> f32 {
+pub fn meter_frac(lin: f32) -> f32 {
     let Some(db) = lin2db(lin) else { return 0.0 };
     let db = db.min(0.0);
     let zero = db2pos(Some(0.0)).max(0.001);

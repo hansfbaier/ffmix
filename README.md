@@ -33,11 +33,11 @@
 
 <table>
   <tr>
-    <td width="50%"><a href="docs/screenshots/matrix.png"><img src="docs/screenshots/matrix.png" alt="FFMix matrix view"></a></td>
+    <td width="50%"><a href="docs/screenshots/matrix.png"><img src="docs/screenshots/matrix.png" alt="FFMix matrix view with live source and output meters"></a></td>
     <td width="50%"><a href="docs/screenshots/settings.png"><img src="docs/screenshots/settings.png" alt="FFMix settings view"></a></td>
   </tr>
   <tr>
-    <td align="center"><sub><b>Matrix</b> — 14 × 14 crosspoints for inputs and playback into every output pair; click, scroll or use the keyboard.</sub></td>
+    <td align="center"><sub><b>Matrix</b> — 14 × 14 crosspoints with live source/output rails and crosspoint activity; click, scroll or use the keyboard.</sub></td>
     <td align="center"><sub><b>Settings</b> — clock, optical/S-PDIF routing, levels, jacks, 48 V, instrument options and control-room monitoring.</sub></td>
   </tr>
 </table>
@@ -54,7 +54,7 @@ path and no daemon to keep alive.
 | --- | --- |
 | **Direct DSP control** | Mixer, output masters and settings are written straight to the interface over `/dev/fw*`. |
 | **TotalMix workflow** | Hardware inputs, playback and outputs in three rows; click an output to edit its submix. |
-| **Real meters** | Input, playback and output levels are read from the interface's meter block, with peak hold and clip indication. |
+| **Real meters** | Input, playback and output levels are read from the interface's meter block, with peak hold and clip indication. The matrix adds live source/output rails and crosspoint activity. |
 | **Everything at hand** | Matrix, 8 presets, fader groups, stereo links, device settings and a tray icon in one small binary. |
 | **Safe coexistence** | Refuses to fight Openface Mixer or `snd-fireface-ctl-service`; tells you exactly what is running. |
 
@@ -133,7 +133,23 @@ quits.
   not the device configuration.
 - **Matrix** — inputs → outputs and playback → outputs, 14 × 14 cells. Click toggles
   between 0 dB and -∞, scroll adjusts ±0.5 dB, right-click clears. Arrow keys move the
-  selection, `Enter` toggles, `Backspace` clears, `+`/`-` trim.
+  selection, `Enter` toggles, `Backspace` clears, `+`/`-` trim. Columns meter sources,
+  rows meter outputs, and active cells glow and grow a bottom activity bed; hover any
+  cell for source, send, crosspoint and output dBFS.
+
+### Matrix metering
+
+The matrix is also a live display. A thin bar under each column head shows that source
+pair's level, and a vertical bar beside each row shows that output pair's post-master
+level; both include peak hold and clip caps. Each crosspoint tints and grows a bottom
+activity bar from the source level times its actual routed gain, with mute, solo, pan
+and stereo links folded in, so the signal visibly travels from the active column into
+the routed cells. Click a rail to reset its peak.
+
+The FF800 meter block exposes per-channel levels, not per-crosspoint taps, so the cell
+reading is a pre-master estimate rather than a separate hardware measurement. The row
+rail remains the real output level. Leaving the estimate pre-master means routing stays
+visible even when an output is muted.
 
 ## Device settings
 
@@ -162,6 +178,7 @@ for ADAT 1/2, S/PDIF and word clock. The settings file is in
 | Main-out volume | `Ctrl+Shift+↑` / `Ctrl+Shift+↓` |
 | Main-out mute / 0 dB | `Ctrl+Shift+M` / `Ctrl+Shift+0` |
 | Previous / next submix | `Ctrl+Shift+←` / `Ctrl+Shift+→` |
+| Reset a matrix rail peak | Click the source or output rail meter |
 | Reset all peaks | `Ctrl+Shift+R` |
 | Quit | Tray → Quit, `Ctrl+Q`, or ⋯ → Quit |
 
@@ -203,6 +220,7 @@ quadlets are input, playback and output amplitudes, full scale `0x7fffff00`.
 | Host | Linux 6.18.57, Hyprland (XWayland), Rust 1.99 |
 | Interface | RME Fireface 800, FireWire node `/dev/fw1`, 48 kHz internal clock |
 | Audio | PipeWire playback through the DSP; hardware output meters respond to routed signal |
+| Matrix live | Source/output rails, peak hold, cell activity and hover dBFS verified with a routed test tone |
 | Mixer | Submix routing, output gain changes, mute, matrix cell edits, presets |
 | Settings | Configuration bits verified by reading the status register back |
 | Tray | StatusNotifierItem menu, mute-all, hide/show, close-to-tray, `--minimized`, quit |
