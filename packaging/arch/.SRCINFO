@@ -1,6 +1,6 @@
 pkgbase = ffmix
 	pkgdesc = Independent TotalMix-style DSP mixer and tray app for the RME Fireface 800
-	pkgver = 0.1.2
+	pkgver = 0.1.3
 	pkgrel = 1
 	url = https://github.com/hansfbaier/ffmix
 	arch = x86_64
@@ -18,7 +18,7 @@ pkgbase = ffmix
 	depends = mesa
 	options = !strip
 	options = !debug
-	source = ffmix-0.1.2.tar.gz::https://github.com/hansfbaier/ffmix/releases/download/v0.1.2/ffmix-0.1.2.tar.gz
-	sha256sums = 7bd3c5f7159d1f48dadb0b799a18640a5153c4c8d3dbee3864b48faa0a84a44b
+	source = ffmix-0.1.3.tar.gz::https://github.com/hansfbaier/ffmix/releases/download/v0.1.3/ffmix-0.1.3.tar.gz
+	sha256sums = b0e7609dcbb907df50a476801739d54ce5c34c4c122cd615e56c9b389dce041a
 
 pkgname = ffmix
