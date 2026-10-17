@@ -1,0 +1,51 @@
+# Maintainer: Hans Baier <foss@hans-baier.de>
+
+pkgname=ffmix
+pkgver=0.1.1
+pkgrel=1
+pkgdesc='Independent TotalMix-style DSP mixer and tray app for the RME Fireface 800'
+arch=('x86_64')
+url='https://github.com/hansfbaier/ffmix'
+license=('MIT')
+depends=(
+  'dbus'
+  'libx11'
+  'libxcursor'
+  'libxi'
+  'libxrender'
+  'libxkbcommon'
+  'libxkbcommon-x11'
+  'wayland'
+  'mesa'
+)
+makedepends=('rust' 'pkgconf')
+options=('!strip' '!debug')
+source=("$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
+sha256sums=('82850b9d321d553a3d43dbb6f9de9f30bf098580cf311083fd6edcf129dfd30a')
+
+build() {
+  cd "$pkgname-$pkgver"
+  export CARGO_HOME="$srcdir/cargo-home"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/$pkgname"
+  cargo build --release --locked --package ffmix
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export CARGO_HOME="$srcdir/cargo-home"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/$pkgname"
+  cargo test --release --locked --package ffmix
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+
+  install -Dm755 "$srcdir/target/release/ffmix" "$pkgdir/usr/bin/ffmix"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 NOTICE.md "$pkgdir/usr/share/doc/$pkgname/NOTICE.md"
+  install -Dm644 packaging/ffmix.desktop "$pkgdir/usr/share/applications/ffmix.desktop"
+  install -Dm644 packaging/ffmix.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/ffmix.svg"
+}

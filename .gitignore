@@ -3,3 +3,8 @@
 /*.zip
 /mixer_dump.json
 /xar.pb
+/packaging/arch/src/
+/packaging/arch/pkg/
+/packaging/arch/*.pkg.tar.zst
+/packaging/arch/*.pkg.tar.zst.sig
+/packaging/arch/*.tar.gz
