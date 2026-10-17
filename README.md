@@ -87,8 +87,8 @@ makepkg -si
 ```
 
 The package installs the binary, desktop entry, icon, license and documentation. A
-prebuilt `ffmix-0.1.1-1-x86_64.pkg.tar.zst` is attached to the
-[v0.1.1 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.1).
+prebuilt `ffmix-0.1.2-1-x86_64.pkg.tar.zst` is attached to the
+[v0.1.2 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.2).
 
 <details>
 <summary><b>Build dependencies</b></summary>
@@ -157,13 +157,17 @@ The matrix is also a live display. A thin bar under each column head shows that 
 pair's post-master level, and a vertical bar beside each row shows that source pair's
 level; both include peak hold and clip caps. Each crosspoint tints and grows a bottom
 activity bar from the source level times its actual routed gain, with mute, solo, pan
-and stereo links folded in, so the signal visibly travels from the active column into
-the routed cells. Click a rail to reset its peak.
+and stereo links folded in, so the signal visibly travels from the active row into the
+routed cells. Click a rail to reset its peak.
+
+Every cell with a non-∞ send has a small meter groove, even while its source is silent;
+cells with no send (-∞) have no meter. The groove fills with the live crosspoint
+estimate.
 
 The FF800 meter block exposes per-channel levels, not per-crosspoint taps, so the cell
-reading is a pre-master estimate rather than a separate hardware measurement. The row
-rail remains the real output level. Leaving the estimate pre-master means routing stays
-visible even when an output is muted.
+reading is a pre-master estimate rather than a separate hardware measurement. The
+column rail remains the real output level. Leaving the estimate pre-master means
+routing stays visible even when an output is muted.
 
 ## Device settings
 

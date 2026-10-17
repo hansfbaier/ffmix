@@ -1258,6 +1258,10 @@ impl App {
                     // source level times the routed gain (mute/solo/pan folded in),
                     // before the output master.
                     painter.rect_filled(cell, 2.0, blend(fill, source_color, 0.68 * activity));
+                }
+                if db.is_some() {
+                    // Every connected cell carries a meter groove, even while its
+                    // source is silent; -∞ cells intentionally have none.
                     let track = Rect::from_min_max(
                         Pos2::new(cell.min.x + 3.0, cell.max.y - 5.0),
                         Pos2::new(cell.max.x - 3.0, cell.max.y - 2.0),
