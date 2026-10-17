@@ -23,6 +23,11 @@
 > behavior independently. The only reused implementation code is MIT-licensed
 > [Openface Mixer](https://github.com/thomas-nelson23/Openface-Mixer).
 
+> **Live matrix metering.** FFMix adds a VU meter to every connected matrix
+> crosspoint. Rows are sources, columns are outputs; silent connections keep a visible
+> meter groove, active routes fill it, and -∞ cells have no meter. TotalMix FX does not
+> meter individual matrix cells.
+
 ---
 
 <p align="center">
@@ -33,11 +38,11 @@
 
 <table>
   <tr>
-    <td width="50%"><a href="docs/screenshots/matrix.png"><img src="docs/screenshots/matrix.png" alt="FFMix matrix view with live source and output meters"></a></td>
+    <td width="50%"><a href="docs/screenshots/matrix.png"><img src="docs/screenshots/matrix.png" alt="FFMix matrix view with source rows, output columns, live rails and cell meters"></a></td>
     <td width="50%"><a href="docs/screenshots/settings.png"><img src="docs/screenshots/settings.png" alt="FFMix settings view"></a></td>
   </tr>
   <tr>
-    <td align="center"><sub><b>Matrix</b> — 14 × 14 crosspoints with live source/output rails and crosspoint activity; click, scroll or use the keyboard.</sub></td>
+    <td align="center"><sub><b>Matrix</b> — source rows, output columns, live source/output rails, and a VU meter in every connected cell. -∞ cells have no meter.</sub></td>
     <td align="center"><sub><b>Settings</b> — clock, optical/S-PDIF routing, levels, jacks, 48 V, instrument options and control-room monitoring.</sub></td>
   </tr>
 </table>
@@ -54,7 +59,8 @@ path and no daemon to keep alive.
 | --- | --- |
 | **Direct DSP control** | Mixer, output masters and settings are written straight to the interface over `/dev/fw*`. |
 | **TotalMix workflow** | Hardware inputs, playback and outputs in three rows; click an output to edit its submix. |
-| **Real meters** | Input, playback and output levels are read from the interface's meter block, with peak hold and clip indication. The matrix adds live source/output rails and crosspoint activity. |
+| **Real meters** | Input, playback and output levels are read from the interface's meter block, with peak hold and clip indication. |
+| **Live matrix metering** | Every connected crosspoint has its own VU meter. Rows are sources with live rails; columns are outputs with live dBFS rails. |
 | **Everything at hand** | Matrix, 8 presets, fader groups, stereo links, device settings and a tray icon in one small binary. |
 | **Safe coexistence** | Refuses to fight Openface Mixer or `snd-fireface-ctl-service`; tells you exactly what is running. |
 
@@ -147,27 +153,37 @@ quits.
 - **Matrix** — inputs → outputs and playback → outputs, 14 × 14 cells. Click toggles
   between 0 dB and -∞, scroll adjusts ±0.5 dB, right-click clears. Arrow keys move the
   selection, `Enter` toggles, `Backspace` clears, `+`/`-` trim. Rows are sources and
-  columns are outputs, as in TotalMix. Rows meter sources, columns meter outputs, and
-  active cells glow and grow a bottom activity bed; hover any cell for source, send,
-  crosspoint and output dBFS.
+  columns are outputs, as in TotalMix. Every connected cell has a live VU meter; see
+  [Matrix metering](#matrix-metering) below.
 
 ### Matrix metering
 
-The matrix is also a live display. A thin bar under each column head shows that output
-pair's post-master level, and a vertical bar beside each row shows that source pair's
-level; both include peak hold and clip caps. Each crosspoint tints and grows a bottom
-activity bar from the source level times its actual routed gain, with mute, solo, pan
-and stereo links folded in, so the signal visibly travels from the active row into the
-routed cells. Click a rail to reset its peak.
+<p align="center">
+  <a href="docs/screenshots/matrix-meters.png"><img src="docs/screenshots/matrix-meters.png" alt="Close-up of FFMix live matrix metering: row source rails, column output rails, and a meter in every connected cell" width="85%"></a>
+</p>
 
-Every cell with a non-∞ send has a small meter groove, even while its source is silent;
-cells with no send (-∞) have no meter. The groove fills with the live crosspoint
-estimate.
+<p align="center"><sub><b>Live crosspoint metering.</b> Row rails are sources; column rails are outputs. Every non-∞ cell has a meter groove: driven cells fill it, silent connections keep the empty groove, and -∞ cells have no meter.</sub></p>
+
+The matrix is a live display, not just a routing grid:
+
+- **Source rails (rows)** show the selected source group's live pair level, peak hold,
+  clip cap and dBFS value. Click a rail to reset its peak.
+- **Output rails (columns)** show each hardware output pair's post-master level, peak
+  hold, clip cap and dBFS value.
+- **Cell VUs** exist in every cell with a non-∞ send. The groove fills with
+  `source level × actual routed gain`; mute, solo, pan and stereo links are folded in.
+  A silent but connected cell keeps its gauge visible; a cell with no send has no meter
+  at all.
+- **Hover a cell** for the source level, send gain, estimated crosspoint level and real
+  output level.
 
 The FF800 meter block exposes per-channel levels, not per-crosspoint taps, so the cell
 reading is a pre-master estimate rather than a separate hardware measurement. The
 column rail remains the real output level. Leaving the estimate pre-master means
 routing stays visible even when an output is muted.
+
+The cell VUs are an FFMix addition: TotalMix FX's matrix shows routing and channel
+meters, but does not meter the individual crosspoints.
 
 ## Device settings
 
@@ -238,7 +254,7 @@ quadlets are input, playback and output amplitudes, full scale `0x7fffff00`.
 | Host | Linux 6.18.57, Hyprland (XWayland), Rust 1.99 |
 | Interface | RME Fireface 800, FireWire node `/dev/fw1`, 48 kHz internal clock |
 | Audio | PipeWire playback through the DSP; hardware output meters respond to routed signal |
-| Matrix live | Source/output rails, peak hold, cell activity and hover dBFS verified with a routed test tone |
+| Matrix live | Source/output rails, per-cell meters, peak hold and hover dBFS verified with routed test tones; silent connected cells keep a groove and -∞ cells have none |
 | Mixer | Submix routing, output gain changes, mute, matrix cell edits, presets |
 | Settings | Configuration bits verified by reading the status register back |
 | Tray | StatusNotifierItem menu, mute-all, hide/show, close-to-tray, `--minimized`, quit |
@@ -280,7 +296,7 @@ src/
   persist.rs   JSON state in ~/.config/ffmix
 docs/
   assets/banner.svg
-  screenshots/{mixer,matrix,settings}.png
+  screenshots/{mixer,matrix,matrix-meters,settings}.png
 ```
 
 State lives in `~/.config/ffmix/`:
