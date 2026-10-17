@@ -409,6 +409,24 @@ impl App {
                     self.settings_dirty = true;
                 }
             }
+            Event::FlashSettings(settings) => {
+                self.settings = settings;
+                self.settings.known = true;
+                self.mark_settings();
+                self.toast("Loaded saved settings from device flash");
+            }
+            Event::FlashMixer(mixer) => {
+                self.mix.sends_in = mixer.sends_in;
+                self.mix.sends_play = mixer.sends_play;
+                for (out, saved) in self.mix.out.iter_mut().zip(mixer.out) {
+                    out.gain = saved.gain;
+                }
+                self.mark_mix();
+                self.toast("Loaded saved mixer from device flash");
+            }
+            Event::FlashError(err) => {
+                self.toast(format!("Flash read failed: {err}"));
+            }
             Event::Meters(frame) => {
                 self.meters.push(&frame);
             }
@@ -1524,6 +1542,40 @@ impl App {
                     });
                 }
             }
+        });
+
+        widgets::card(ui, "DEVICE FLASH", |ui| {
+            ui.label(
+                egui::RichText::new(
+                    "Read the state saved in the interface's flash. Reading never writes flash.",
+                )
+                .size(9.5)
+                .color(MUTED),
+            );
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(self.connected, egui::Button::new("Load saved settings"))
+                    .clicked()
+                {
+                    self.backend.send(Command::ReadFlashSettings);
+                    self.toast("Reading saved settings from device flash…");
+                }
+                if ui
+                    .add_enabled(self.connected, egui::Button::new("Load saved mixer"))
+                    .clicked()
+                {
+                    self.backend.send(Command::ReadFlashMixer);
+                    self.toast("Reading saved mixer from device flash…");
+                }
+            });
+            ui.label(
+                egui::RichText::new(
+                    "Flash does not store mutes, stereo links, groups or solo; those stay as set.",
+                )
+                .size(8.5)
+                .color(DIMTEXT),
+            );
         });
 
         widgets::card(ui, "CLOCK", |ui| {

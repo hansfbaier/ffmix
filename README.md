@@ -39,11 +39,11 @@
 <table>
   <tr>
     <td width="50%"><a href="docs/screenshots/matrix-vu.png"><img src="docs/screenshots/matrix-vu.png" alt="FFMix matrix view with source rows, output columns, live rails and cell meters"></a></td>
-    <td width="50%"><a href="docs/screenshots/settings.png"><img src="docs/screenshots/settings.png" alt="FFMix settings view"></a></td>
+    <td width="50%"><a href="docs/screenshots/settings-flash.png"><img src="docs/screenshots/settings-flash.png" alt="FFMix settings view"></a></td>
   </tr>
   <tr>
     <td align="center"><sub><b>Matrix</b> — source rows, output columns, live source/output rails, and a VU meter in every connected cell. -∞ cells have no meter.</sub></td>
-    <td align="center"><sub><b>Settings</b> — clock, optical/S-PDIF routing, levels, jacks, 48 V, instrument options and control-room monitoring.</sub></td>
+    <td align="center"><sub><b>Settings</b> — clock, optical/S-PDIF routing, levels, jacks, 48 V, instrument options, control-room monitoring and read-only device-flash import.</sub></td>
   </tr>
 </table>
 
@@ -61,6 +61,7 @@ path and no daemon to keep alive.
 | **TotalMix workflow** | Hardware inputs, playback and outputs in three rows; click an output to edit its submix. |
 | **Real meters** | Input, playback and output levels are read from the interface's meter block, with peak hold and clip indication. |
 | **Live matrix metering** | Every connected crosspoint has its own VU meter. Rows are sources with live rails; columns are outputs with live dBFS rails. |
+| **Saved flash import** | Read the FF800's saved settings and mixer snapshot from the interface's flash. Read-only; no flash writes. |
 | **Everything at hand** | Matrix, 8 presets, fader groups, stereo links, device settings and a tray icon in one small binary. |
 | **Safe coexistence** | Refuses to fight Openface Mixer or `snd-fireface-ctl-service`; tells you exactly what is running. |
 
@@ -93,8 +94,8 @@ makepkg -si
 ```
 
 The package installs the binary, desktop entry, icon, license and documentation. A
-prebuilt `ffmix-0.1.3-1-x86_64.pkg.tar.zst` is attached to the
-[v0.1.3 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.3).
+prebuilt `ffmix-0.1.4-1-x86_64.pkg.tar.zst` is attached to the
+[v0.1.4 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.4).
 
 <details>
 <summary><b>Build dependencies</b></summary>
@@ -198,6 +199,18 @@ The status register is read live: sample rate, active clock source, and lock/syn
 for ADAT 1/2, S/PDIF and word clock. The settings file is in
 `~/.config/ffmix/settings.json`.
 
+### Device flash (read-only)
+
+The **DEVICE FLASH** card in Settings reads the snapshot stored on the interface:
+
+- **Load saved settings** restores clock, S/PDIF, levels, jacks, phantom and instrument
+  options from flash.
+- **Load saved mixer** restores crosspoint gains/pan and output volumes from flash.
+
+FFMix reads the FF800's flash over FireWire; it never writes or erases flash. Mutes,
+stereo links, groups and solo are not part of the flash snapshot, so they remain as
+currently set.
+
 ## Controls
 
 | Action | Input |
@@ -256,6 +269,7 @@ quadlets are input, playback and output amplitudes, full scale `0x7fffff00`.
 | Interface | RME Fireface 800, FireWire node `/dev/fw1`, 48 kHz internal clock |
 | Audio | PipeWire playback through the DSP; hardware output meters respond to routed signal |
 | Matrix live | Source/output rails, per-cell meters, peak hold and hover dBFS verified with routed test tones; silent connected cells keep a groove and -∞ cells have none |
+| Device flash | Read-only import of saved settings and mixer snapshot verified against the FF800's flash contents |
 | Mixer | Submix routing, output gain changes, mute, matrix cell edits, presets |
 | Settings | Configuration bits verified by reading the status register back |
 | Tray | StatusNotifierItem menu, mute-all, hide/show, close-to-tray, `--minimized`, quit |
@@ -297,7 +311,7 @@ src/
   persist.rs   JSON state in ~/.config/ffmix
 docs/
   assets/banner.svg
-  screenshots/{mixer-vu,matrix-vu,matrix-vu-detail,settings}.png
+  screenshots/{mixer-vu,matrix-vu,matrix-vu-detail,settings-flash}.png
 ```
 
 State lives in `~/.config/ffmix/`:

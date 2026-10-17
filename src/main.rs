@@ -4,6 +4,7 @@
 mod app;
 mod backend;
 mod ff800;
+mod flash;
 mod fw;
 mod model;
 mod persist;

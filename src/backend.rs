@@ -12,12 +12,15 @@ use crate::ff800::{
     self, DeviceSettings, MeterFrame, StatusInfo, CONFIG_WORDS, METER_LEN, MIXER_BLOCK, REG_CONFIG,
     REG_METERS, REG_MIXER, REG_OUTPUT, REG_STATUS,
 };
+use crate::flash::{self, FlashMixer};
 use crate::fw::Firewire;
 use crate::model::{MixState, N_OUT};
 
 pub enum Command {
     Mix(Box<MixState>),
     Settings(Box<DeviceSettings>),
+    ReadFlashSettings,
+    ReadFlashMixer,
     Rescan,
 }
 
@@ -25,6 +28,9 @@ pub enum Event {
     Connection { node: Option<String>, error: Option<String> },
     Status(StatusInfo),
     Settings(DeviceSettings),
+    FlashSettings(DeviceSettings),
+    FlashMixer(FlashMixer),
+    FlashError(String),
     Meters(MeterFrame),
     Error(String),
 }
@@ -97,6 +103,38 @@ fn run(cmd_rx: Receiver<Command>, evt_tx: Sender<Event>) {
                 Command::Settings(s) => {
                     settings = *s;
                     dirty = true;
+                }
+                Command::ReadFlashSettings => {
+                    let Some(device) = fw.as_mut() else {
+                        let _ = evt_tx.send(Event::FlashError(
+                            "not connected to the Fireface".to_owned(),
+                        ));
+                        continue;
+                    };
+                    match read_flash_settings(device) {
+                        Ok(settings) => {
+                            let _ = evt_tx.send(Event::FlashSettings(settings));
+                        }
+                        Err(err) => {
+                            let _ = evt_tx.send(Event::FlashError(err.to_string()));
+                        }
+                    }
+                }
+                Command::ReadFlashMixer => {
+                    let Some(device) = fw.as_mut() else {
+                        let _ = evt_tx.send(Event::FlashError(
+                            "not connected to the Fireface".to_owned(),
+                        ));
+                        continue;
+                    };
+                    match read_flash_mixer(device) {
+                        Ok(mixer) => {
+                            let _ = evt_tx.send(Event::FlashMixer(mixer));
+                        }
+                        Err(err) => {
+                            let _ = evt_tx.send(Event::FlashError(err.to_string()));
+                        }
+                    }
                 }
                 Command::Rescan => {
                     fw = None;
@@ -308,6 +346,35 @@ fn sync(
         }
     }
     Ok(routes)
+}
+
+fn read_flash_bytes(fw: &mut Firewire, mut addr: u64, len: usize) -> io::Result<Vec<u8>> {
+    let mut out = Vec::with_capacity(len);
+    while out.len() < len {
+        let n = (len - out.len()).min(256);
+        let block = fw.read_block(addr, n)?;
+        if block.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "short flash block read",
+            ));
+        }
+        addr += block.len() as u64;
+        out.extend_from_slice(&block);
+    }
+    Ok(out)
+}
+
+fn read_flash_settings(fw: &mut Firewire) -> io::Result<DeviceSettings> {
+    let raw = read_flash_bytes(fw, flash::SETTINGS_ADDR, flash::SETTINGS_BYTES)?;
+    flash::decode_settings(&raw).map_err(io::Error::other)
+}
+
+fn read_flash_mixer(fw: &mut Firewire) -> io::Result<FlashMixer> {
+    let volume = read_flash_bytes(fw, flash::MIXER_VOLUME_ADDR, flash::MIXER_ARRAY_BYTES)?;
+    let pan = read_flash_bytes(fw, flash::MIXER_PAN_ADDR, flash::MIXER_ARRAY_BYTES)?;
+    let hw = read_flash_bytes(fw, flash::MIXER_HW_ADDR, flash::MIXER_HW_BYTES)?;
+    flash::decode_mixer(&volume, &pan, &hw).map_err(io::Error::other)
 }
 
 fn le32(buf: &[u8], off: usize) -> u32 {
