@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-labelledby="title">
+  <title id="title">FFMix</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a3036"/>
+      <stop offset="1" stop-color="#15181b"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fe0cc"/>
+      <stop offset="1" stop-color="#3d9f8c"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0c766"/>
+      <stop offset="1" stop-color="#c58e2c"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7ed9a3"/>
+      <stop offset="1" stop-color="#3a9e63"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="27" fill="url(#bg)" stroke="#414951" stroke-width="2"/>
+  <rect x="2" y="2" width="124" height="124" rx="27" fill="none" stroke="#ffffff" stroke-opacity=".06" stroke-width="1"/>
+  <g fill="#0d0f11">
+    <rect x="22" y="34" width="84" height="10" rx="5"/>
+    <rect x="22" y="59" width="84" height="10" rx="5"/>
+    <rect x="22" y="84" width="84" height="10" rx="5"/>
+  </g>
+  <g fill="#48505a">
+    <rect x="24" y="36" width="80" height="4" rx="2"/>
+    <rect x="24" y="61" width="80" height="4" rx="2"/>
+    <rect x="24" y="86" width="80" height="4" rx="2"/>
+  </g>
+  <g stroke="#101315" stroke-width="2">
+    <rect x="38" y="29" width="20" height="20" rx="6" fill="url(#teal)"/>
+    <rect x="72" y="54" width="20" height="20" rx="6" fill="url(#amber)"/>
+    <rect x="54" y="79" width="20" height="20" rx="6" fill="url(#green)"/>
+  </g>
+  <g fill="#ffffff" opacity=".55">
+    <rect x="42" y="32" width="12" height="2" rx="1"/>
+    <rect x="76" y="57" width="12" height="2" rx="1"/>
+    <rect x="58" y="82" width="12" height="2" rx="1"/>
+  </g>
+</svg>

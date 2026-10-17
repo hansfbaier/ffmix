@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=FFMix
+GenericName=Fireface 800 Mixer
+Comment=Independent DSP mixer for the RME Fireface 800
+Exec=ffmix
+Icon=ffmix
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=Fireface;RME;mixer;audio;FireWire;TotalMix;
+StartupNotify=true
+StartupWMClass=ffmix
