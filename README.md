@@ -88,7 +88,7 @@ makepkg -si
 
 The package installs the binary, desktop entry, icon, license and documentation. A
 prebuilt `ffmix-0.1.1-1-x86_64.pkg.tar.zst` is attached to the
-[v0.1.0 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.1).
+[v0.1.1 release](https://github.com/hansfbaier/ffmix/releases/tag/v0.1.1).
 
 <details>
 <summary><b>Build dependencies</b></summary>
