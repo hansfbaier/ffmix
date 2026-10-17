@@ -1,0 +1,20 @@
+[package]
+name = "ffmix"
+version = "0.1.0"
+edition = "2021"
+description = "Independent TotalMix FX-style mixer and tray app for the RME Fireface 800 on Linux (not affiliated with RME)"
+license = "MIT"
+
+[dependencies]
+eframe = "0.31.1"
+egui = "0.31.1"
+ksni = "0.2.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+libc = "0.2"
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+strip = true

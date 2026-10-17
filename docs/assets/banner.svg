@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-labelledby="title desc">
+  <title id="title">FFMix — independent DSP mixer for the RME Fireface 800</title>
+  <desc id="desc">Dark banner with the FFMix wordmark and an abstract three-row mixer.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15191d"/>
+      <stop offset="0.55" stop-color="#1a2025"/>
+      <stop offset="1" stop-color="#111518"/>
+    </linearGradient>
+    <radialGradient id="teal" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4fb8a4" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#4fb8a4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="amber" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#d99b3d" stop-opacity="0.17"/>
+      <stop offset="1" stop-color="#d99b3d" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.035" stroke-width="1"/>
+    </pattern>
+    <g id="strip">
+      <rect x="0" y="0" width="38" height="44" rx="4" fill="#2a3036"/>
+      <rect x="0" y="0" width="38" height="3" rx="1.5" fill="#3d454d"/>
+      <rect x="16" y="12" width="4" height="26" rx="2" fill="#0c0e10"/>
+      <rect x="28" y="12" width="3" height="26" rx="1.5" fill="#0c0e10"/>
+    </g>
+  </defs>
+
+  <rect width="1200" height="300" rx="24" fill="url(#bg)"/>
+  <rect width="1200" height="300" rx="24" fill="url(#grid)"/>
+  <circle cx="1020" cy="40" r="190" fill="url(#teal)"/>
+  <circle cx="720" cy="300" r="220" fill="url(#amber)"/>
+  <rect x="0.5" y="0.5" width="1199" height="299" rx="23.5" fill="none" stroke="#ffffff" stroke-opacity="0.06"/>
+
+  <!-- left: identity -->
+  <rect x="64" y="52" width="58" height="22" rx="11" fill="#2a3036" stroke="#3d454d"/>
+  <text x="93" y="67" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="600" fill="#9aa3ad" letter-spacing="0.6">v0.1</text>
+
+  <text x="62" y="142" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="76" font-weight="800" letter-spacing="-3" fill="#f2f4f6">FF<tspan fill="#82d7c2">Mix</tspan></text>
+  <text x="64" y="180" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="19" font-weight="500" fill="#aeb6bf">DSP mixer and control for the RME Fireface 800</text>
+  <text x="64" y="208" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="12.5" fill="#7d858e">28 in · 28 playback · 28 out · FireWire · tray · no daemon</text>
+
+  <g font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" font-weight="600">
+    <rect x="64" y="232" width="92" height="24" rx="12" fill="#242a30" stroke="#394149"/>
+    <text x="110" y="248" text-anchor="middle" fill="#c9d0d6">Rust + egui</text>
+    <rect x="164" y="232" width="78" height="24" rx="12" fill="#242a30" stroke="#394149"/>
+    <text x="203" y="248" text-anchor="middle" fill="#c9d0d6">Linux</text>
+    <rect x="250" y="232" width="138" height="24" rx="12" fill="#242a30" stroke="#394149"/>
+    <text x="319" y="248" text-anchor="middle" fill="#c9d0d6">Direct FireWire DSP</text>
+  </g>
+
+  <!-- right: abstract mixer card -->
+  <rect x="704" y="42" width="440" height="216" rx="18" fill="#1c2227" stroke="#343c44"/>
+  <text x="726" y="66" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#7d858e">MIXER</text>
+  <text x="1122" y="66" text-anchor="end" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="9.5" font-weight="600" fill="#82d7c2">48 kHz · Internal</text>
+
+  <!-- row labels -->
+  <g font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="7.5" font-weight="700" letter-spacing="0.8" fill="#7d858e">
+    <text x="726" y="106">INPUTS</text>
+    <text x="726" y="158">PLAYBACK</text>
+    <text x="726" y="210">OUTPUTS</text>
+  </g>
+
+  <!-- inputs row -->
+  <g>
+    <use href="#strip" x="786" y="76"/><rect x="786" y="76" width="38" height="3" rx="1.5" fill="#4d8bd4"/>
+    <rect x="812" y="92" width="3" height="18" rx="1.5" fill="#4cc27a"/>
+    <rect x="804" y="84" width="12" height="16" rx="3" fill="#8d939b"/><rect x="805" y="91" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="827" y="76"/><rect x="827" y="76" width="38" height="3" rx="1.5" fill="#4d8bd4"/>
+    <rect x="853" y="88" width="3" height="14" rx="1.5" fill="#4cc27a"/>
+    <rect x="845" y="92" width="12" height="16" rx="3" fill="#8d939b"/><rect x="846" y="99" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="868" y="76"/><rect x="868" y="76" width="38" height="3" rx="1.5" fill="#4d8bd4"/>
+    <rect x="894" y="96" width="3" height="10" rx="1.5" fill="#4cc27a"/>
+    <rect x="886" y="78" width="12" height="16" rx="3" fill="#8d939b"/><rect x="887" y="85" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="909" y="76"/><rect x="909" y="76" width="38" height="3" rx="1.5" fill="#4d8bd4"/>
+    <rect x="935" y="88" width="3" height="12" rx="1.5" fill="#4cc27a"/>
+    <rect x="927" y="88" width="12" height="16" rx="3" fill="#8d939b"/><rect x="928" y="95" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="950" y="76"/><rect x="950" y="76" width="38" height="3" rx="1.5" fill="#4d8bd4"/>
+    <rect x="976" y="92" width="3" height="18" rx="1.5" fill="#4cc27a"/>
+    <rect x="968" y="82" width="12" height="16" rx="3" fill="#8d939b"/><rect x="969" y="89" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="991" y="76"/><rect x="991" y="76" width="38" height="3" rx="1.5" fill="#4d8bd4"/>
+    <rect x="1017" y="84" width="3" height="10" rx="1.5" fill="#4cc27a"/>
+    <rect x="1009" y="90" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1010" y="97" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="1032" y="76"/><rect x="1032" y="76" width="38" height="3" rx="1.5" fill="#4d8bd4"/>
+    <rect x="1058" y="96" width="3" height="10" rx="1.5" fill="#4cc27a"/>
+    <rect x="1050" y="78" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1051" y="85" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="1073" y="76"/><rect x="1073" y="76" width="38" height="3" rx="1.5" fill="#4d8bd4"/>
+    <rect x="1099" y="88" width="3" height="14" rx="1.5" fill="#4cc27a"/>
+    <rect x="1091" y="86" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1092" y="93" width="10" height="1" fill="#ffffff"/>
+  </g>
+
+  <!-- playback row -->
+  <g>
+    <use href="#strip" x="786" y="128"/><rect x="786" y="128" width="38" height="3" rx="1.5" fill="#4fb8a4"/>
+    <rect x="812" y="142" width="3" height="24" rx="1.5" fill="#4cc27a"/>
+    <rect x="804" y="140" width="12" height="16" rx="3" fill="#8d939b"/><rect x="805" y="147" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="827" y="128"/><rect x="827" y="128" width="38" height="3" rx="1.5" fill="#4fb8a4"/>
+    <rect x="853" y="144" width="3" height="18" rx="1.5" fill="#4cc27a"/>
+    <rect x="845" y="136" width="12" height="16" rx="3" fill="#8d939b"/><rect x="846" y="143" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="868" y="128"/><rect x="868" y="128" width="38" height="3" rx="1.5" fill="#4fb8a4"/>
+    <rect x="894" y="146" width="3" height="20" rx="1.5" fill="#4cc27a"/>
+    <rect x="886" y="138" width="12" height="16" rx="3" fill="#8d939b"/><rect x="887" y="145" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="909" y="128"/><rect x="909" y="128" width="38" height="3" rx="1.5" fill="#4fb8a4"/>
+    <rect x="935" y="140" width="3" height="12" rx="1.5" fill="#4cc27a"/>
+    <rect x="927" y="142" width="12" height="16" rx="3" fill="#8d939b"/><rect x="928" y="149" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="950" y="128"/><rect x="950" y="128" width="38" height="3" rx="1.5" fill="#4fb8a4"/>
+    <rect x="976" y="144" width="3" height="22" rx="1.5" fill="#4cc27a"/>
+    <rect x="968" y="134" width="12" height="16" rx="3" fill="#8d939b"/><rect x="969" y="141" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="991" y="128"/><rect x="991" y="128" width="38" height="3" rx="1.5" fill="#4fb8a4"/>
+    <rect x="1017" y="146" width="3" height="12" rx="1.5" fill="#4cc27a"/>
+    <rect x="1009" y="138" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1010" y="145" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="1032" y="128"/><rect x="1032" y="128" width="38" height="3" rx="1.5" fill="#4fb8a4"/>
+    <rect x="1058" y="142" width="3" height="18" rx="1.5" fill="#4cc27a"/>
+    <rect x="1050" y="136" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1051" y="143" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="1073" y="128"/><rect x="1073" y="128" width="38" height="3" rx="1.5" fill="#4fb8a4"/>
+    <rect x="1099" y="146" width="3" height="20" rx="1.5" fill="#4cc27a"/>
+    <rect x="1091" y="134" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1092" y="141" width="10" height="1" fill="#ffffff"/>
+  </g>
+
+  <!-- outputs row -->
+  <g>
+    <use href="#strip" x="786" y="180"/><rect x="786" y="180" width="38" height="3" rx="1.5" fill="#d99b3d"/>
+    <rect x="812" y="194" width="3" height="24" rx="1.5" fill="#4cc27a"/>
+    <rect x="804" y="188" width="12" height="16" rx="3" fill="#8d939b"/><rect x="805" y="195" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="827" y="180"/><rect x="827" y="180" width="38" height="3" rx="1.5" fill="#d99b3d"/>
+    <rect x="853" y="196" width="3" height="18" rx="1.5" fill="#4cc27a"/>
+    <rect x="845" y="188" width="12" height="16" rx="3" fill="#8d939b"/><rect x="846" y="195" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="868" y="180"/><rect x="868" y="180" width="38" height="3" rx="1.5" fill="#d99b3d"/>
+    <rect x="894" y="194" width="3" height="24" rx="1.5" fill="#4cc27a"/>
+    <rect x="886" y="190" width="12" height="16" rx="3" fill="#8d939b"/><rect x="887" y="197" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="909" y="180"/><rect x="909" y="180" width="38" height="3" rx="1.5" fill="#d99b3d"/>
+    <rect x="935" y="192" width="3" height="16" rx="1.5" fill="#4cc27a"/>
+    <rect x="927" y="196" width="12" height="16" rx="3" fill="#8d939b"/><rect x="928" y="203" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="950" y="180"/><rect x="950" y="180" width="38" height="3" rx="1.5" fill="#d99b3d"/>
+    <rect x="976" y="196" width="3" height="18" rx="1.5" fill="#4cc27a"/>
+    <rect x="968" y="186" width="12" height="16" rx="3" fill="#8d939b"/><rect x="969" y="193" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="991" y="180"/><rect x="991" y="180" width="38" height="3" rx="1.5" fill="#d99b3d"/>
+    <rect x="1017" y="192" width="3" height="20" rx="1.5" fill="#4cc27a"/>
+    <rect x="1009" y="192" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1010" y="199" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="1032" y="180"/><rect x="1032" y="180" width="38" height="3" rx="1.5" fill="#d99b3d"/>
+    <rect x="1058" y="196" width="3" height="16" rx="1.5" fill="#4cc27a"/>
+    <rect x="1050" y="186" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1051" y="193" width="10" height="1" fill="#ffffff"/>
+
+    <use href="#strip" x="1073" y="180"/><rect x="1073" y="180" width="38" height="3" rx="1.5" fill="#d99b3d"/>
+    <rect x="1099" y="192" width="3" height="22" rx="1.5" fill="#4cc27a"/>
+    <rect x="1091" y="190" width="12" height="16" rx="3" fill="#8d939b"/><rect x="1092" y="197" width="10" height="1" fill="#ffffff"/>
+  </g>
+
+  <text x="64" y="278" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10.5" fill="#66707a">direct firewire-cdev · mixer state on the interface · tray-native</text>
+</svg>
