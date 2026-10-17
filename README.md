@@ -31,14 +31,14 @@
 ---
 
 <p align="center">
-  <a href="docs/screenshots/mixer.png"><img src="docs/screenshots/mixer.png" alt="FFMix mixer view: hardware inputs, playback and outputs with faders and meters" width="100%"></a>
+  <a href="docs/screenshots/mixer-vu.png"><img src="docs/screenshots/mixer-vu.png" alt="FFMix mixer view with wide stereo VU meters for inputs, playback and outputs" width="100%"></a>
 </p>
 
-<p align="center"><sub><b>Mixer</b> — select an output, then mix every input and playback channel into it. Real hardware meters, peak hold, fader groups, stereo links and presets.</sub></p>
+<p align="center"><sub><b>Mixer</b> — select an output, then mix every input and playback channel into it. Wide stereo hardware meters, peak hold, fader groups, stereo links and presets.</sub></p>
 
 <table>
   <tr>
-    <td width="50%"><a href="docs/screenshots/matrix.png"><img src="docs/screenshots/matrix.png" alt="FFMix matrix view with source rows, output columns, live rails and cell meters"></a></td>
+    <td width="50%"><a href="docs/screenshots/matrix-vu.png"><img src="docs/screenshots/matrix-vu.png" alt="FFMix matrix view with source rows, output columns, live rails and cell meters"></a></td>
     <td width="50%"><a href="docs/screenshots/settings.png"><img src="docs/screenshots/settings.png" alt="FFMix settings view"></a></td>
   </tr>
   <tr>
@@ -160,7 +160,7 @@ quits.
 ### Matrix metering
 
 <p align="center">
-  <a href="docs/screenshots/matrix-meters.png"><img src="docs/screenshots/matrix-meters.png" alt="Close-up of FFMix live matrix metering: row source rails, column output rails, and a meter in every connected cell" width="85%"></a>
+  <a href="docs/screenshots/matrix-vu-detail.png"><img src="docs/screenshots/matrix-vu-detail.png" alt="Close-up of FFMix live matrix metering: row source rails, column output rails, and a meter in every connected cell" width="85%"></a>
 </p>
 
 <p align="center"><sub><b>Live crosspoint metering.</b> Row rails are sources; column rails are outputs. Every non-∞ cell has a meter groove: driven cells fill it, silent connections keep the empty groove, and -∞ cells have no meter.</sub></p>
@@ -297,7 +297,7 @@ src/
   persist.rs   JSON state in ~/.config/ffmix
 docs/
   assets/banner.svg
-  screenshots/{mixer,matrix,matrix-meters,settings}.png
+  screenshots/{mixer-vu,matrix-vu,matrix-vu-detail,settings}.png
 ```
 
 State lives in `~/.config/ffmix/`:
