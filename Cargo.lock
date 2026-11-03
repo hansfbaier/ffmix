@@ -1114,6 +1114,7 @@ name = "ffmix"
 version = "0.1.5"
 dependencies = [
  "anyhow",
+ "dbus",
  "eframe",
  "egui",
  "ksni",

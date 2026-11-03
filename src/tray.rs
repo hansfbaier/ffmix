@@ -3,6 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
+use std::time::Duration;
 
 use ksni::menu::StandardItem;
 use ksni::{Icon, MenuItem, Tray, TrayService};
@@ -12,6 +13,42 @@ pub enum UiCmd {
     MuteAll,
     ShowTab(u8),
     Quit,
+}
+
+/// True when a StatusNotifierWatcher is on the session bus (KDE, GNOME with the
+/// AppIndicator extension, waybar, ...). Without one the icon has nowhere to
+/// appear, so hiding the window at startup would make the app unreachable.
+pub fn available() -> bool {
+    let conn = match dbus::blocking::Connection::new_session() {
+        Ok(conn) => conn,
+        Err(err) => {
+            eprintln!("ffmix: no session bus for the tray icon: {err}");
+            return false;
+        }
+    };
+    let proxy = conn.with_proxy(
+        "org.freedesktop.DBus",
+        "/org/freedesktop/DBus",
+        Duration::from_millis(500),
+    );
+    let has_owner = |name: &str| -> Option<bool> {
+        let owned: Result<(bool,), dbus::Error> =
+            proxy.method_call("org.freedesktop.DBus", "NameHasOwner", (name,));
+        owned.ok().map(|(owned,)| owned)
+    };
+    // The spec name is the KDE one; some hosts also export the neutral alias.
+    match (
+        has_owner("org.kde.StatusNotifierWatcher"),
+        has_owner("org.freedesktop.StatusNotifierWatcher"),
+    ) {
+        (Some(kde), Some(freedesktop)) => kde || freedesktop,
+        (Some(kde), None) => kde,
+        (None, Some(freedesktop)) => freedesktop,
+        (None, None) => {
+            eprintln!("ffmix: cannot query the session bus for a tray host");
+            false
+        }
+    }
 }
 
 pub fn spawn(tx: Sender<UiCmd>, ctx: egui::Context, visible: Arc<AtomicBool>) -> bool {

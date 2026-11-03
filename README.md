@@ -115,7 +115,11 @@ sudo apt install build-essential pkg-config libdbus-1-dev libx11-dev libxcursor-
 </details>
 
 <details>
-<summary><b>Start hidden in the tray at login</b></summary>
+<summary><b>Start at login</b></summary>
+
+FFMix is a tray app: with a StatusNotifier host running (KDE, GNOME with the
+AppIndicator extension, waybar, ...) it starts in the tray and opens no window. The
+setting is in **Settings → APPLICATION → Start in the tray** and defaults to on.
 
 ```sh
 mkdir -p ~/.config/autostart
@@ -124,14 +128,15 @@ cat > ~/.config/autostart/ffmix.desktop <<'EOF'
 Type=Application
 Name=FFMix
 Comment=Fireface 800 DSP mixer
-Exec=ffmix --minimized
+Exec=ffmix
 Terminal=false
 X-GNOME-Autostart-enabled=true
 EOF
 ```
 
-Close the window to hide it; use the tray icon to restore. `Ctrl+Q` or the tray menu
-quits.
+`ffmix --minimized` forces the tray start for one run. Without a tray host the window
+opens instead, because a hidden window with no icon cannot be reached. Close the window
+to hide it again; use the tray icon to restore. `Ctrl+Q` or the tray menu quits.
 
 </details>
 
@@ -276,7 +281,7 @@ quadlets are input, playback and output amplitudes, full scale `0x7fffff00`.
 | Device flash | Read-only import of saved settings and mixer snapshot verified against the FF800's flash contents |
 | Mixer | Submix routing, output gain changes, mute, matrix cell edits, presets |
 | Settings | Configuration bits verified by reading the status register back |
-| Tray | StatusNotifierItem menu, mute-all, hide/show, close-to-tray, `--minimized`, quit |
+| Tray | Tray-first start (no window at launch), StatusNotifierItem menu, mute-all, hide/show, close-to-tray, `--minimized`, quit |
 
 ## One mixer controller at a time
 
@@ -299,6 +304,10 @@ winit cannot hide or unhide a native Wayland window, which would break close-to-
 FFMix therefore runs as an **X11/XWayland** client by default when `DISPLAY` is
 available. Set `FFMIX_NATIVE_WAYLAND=1` to keep the native Wayland backend; in that mode
 the window cannot be restored from the tray after hiding.
+
+Tray-first start needs a StatusNotifierWatcher on the session bus. FFMix checks
+`org.kde.StatusNotifierWatcher` / `org.freedesktop.StatusNotifierWatcher` before hiding
+the window; if neither name has an owner, the window opens so the mixer stays reachable.
 
 ## Project layout
 
@@ -325,7 +334,7 @@ State lives in `~/.config/ffmix/`:
 | `mix.json` | sends, pans, mutes, output masters, groups, selected submix |
 | `presets.json` | eight preset slots |
 | `settings.json` | FF800 configuration words |
-| `config.json` | window/tab state, close-to-tray, main-out pair |
+| `config.json` | window/tab state, close-to-tray, start-in-tray, main-out pair |
 
 ## Limitations
 

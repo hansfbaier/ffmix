@@ -36,8 +36,11 @@ fn main() -> eframe::Result<()> {
              \n\
              Usage: ffmix [--minimized]\n\
              \n\
-             The window can be closed to the system tray. Quit from the tray menu or\n\
-             the application menu (⋯ → Quit).\n\
+             FFMix is a tray app: it starts in the tray instead of opening the window\n\
+             when a StatusNotifier host (KDE, GNOME AppIndicator, waybar, ...) is on\n\
+             the session bus. --minimized forces that. Without a tray host the\n\
+             window opens, and it can be closed to the tray once a host appears.\n\
+             Quit from the tray menu or the application menu (⋯ → Quit).\n\
              \n\
              Not affiliated with or endorsed by RME. No RME code or assets are included.",
             env!("CARGO_PKG_VERSION")
@@ -62,6 +65,19 @@ fn main() -> eframe::Result<()> {
         }
     };
 
+    let config = persist::load_config();
+    let tray_host = tray::available();
+    // Tray apps belong in the tray: open the window only when there is no tray
+    // host to click, since a hidden window with no icon is unreachable.
+    let start_hidden =
+        (config.start_hidden || std::env::args().any(|a| a == "--minimized")) && tray_host;
+    if !tray_host && std::env::args().any(|a| a == "--minimized") {
+        eprintln!(
+            "ffmix: no StatusNotifier host on the session bus; opening the window instead of \
+             starting in the tray"
+        );
+    }
+
     let icon = app_icon();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -69,6 +85,7 @@ fn main() -> eframe::Result<()> {
             .with_app_id("ffmix")
             .with_inner_size([1600.0, 980.0])
             .with_min_inner_size([980.0, 620.0])
+            .with_visible(!start_hidden)
             .with_icon(Arc::new(icon)),
         vsync: true,
         ..Default::default()
@@ -77,7 +94,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "FFMix — Fireface 800",
         options,
-        Box::new(|cc| Ok(Box::new(App::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(App::new(cc, start_hidden, tray_host)))),
     )
 }
 
@@ -140,8 +157,11 @@ fn write_test() {
 }
 
 fn single_instance() -> Option<std::fs::File> {
+    // SAFETY: getuid takes no arguments, has no preconditions and cannot fail.
     let path = format!("/tmp/ffmix-{}.lock", unsafe { libc::getuid() });
-    let file = OpenOptions::new().create(true).write(true).open(path).ok()?;
+    let file = OpenOptions::new().create(true).write(true).truncate(false).open(path).ok()?;
+    // SAFETY: the fd is owned and live here; flock consumes no memory and LOCK_NB
+    // never blocks the calling thread.
     let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
     (rc == 0).then_some(file)
 }

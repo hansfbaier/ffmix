@@ -16,6 +16,8 @@ pub struct AppConfig {
     /// 0 = inputs -> outputs, 1 = playback -> outputs.
     pub matrix_kind: u8,
     pub close_to_tray: bool,
+    /// Omitting the field (older configs) falls back to `true`: the app is a tray
+    /// app and starts in the tray when a StatusNotifier host is available.
     pub start_hidden: bool,
     /// Output pair used by the Dim button and the main-out readout.
     pub main_pair: usize,
@@ -29,7 +31,7 @@ impl Default for AppConfig {
             tab: 0,
             matrix_kind: 0,
             close_to_tray: true,
-            start_hidden: false,
+            start_hidden: true,
             main_pair: 0,
             window_size: None,
             window_maximized: false,

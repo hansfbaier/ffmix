@@ -192,8 +192,8 @@ pub struct App {
     main_mute: bool,
     ui_rx: Receiver<UiCmd>,
     visible: Arc<AtomicBool>,
-    hidden: bool,
     quit: bool,
+    /// Set once the tray-only start has hidden the window (see `update`).
     start_hidden_done: bool,
     dirty_save: bool,
     last_save: Instant,
@@ -207,14 +207,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, start_hidden: bool, tray_host: bool) -> Self {
         widgets::apply_theme(&cc.egui_ctx);
 
-        let mut config = persist::load_config();
-        let start_hidden = config.start_hidden || std::env::args().any(|a| a == "--minimized");
-        if start_hidden {
-            config.start_hidden = true;
-        }
+        let config = persist::load_config();
         if let Some(size) = config.window_size {
             cc.egui_ctx
                 .send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(size[0], size[1])));
@@ -232,7 +228,9 @@ impl App {
 
         let (ui_tx, ui_rx) = mpsc::channel();
         let visible = Arc::new(AtomicBool::new(!start_hidden));
-        let tray_ok = tray::spawn(ui_tx, cc.egui_ctx.clone(), visible.clone());
+        let tray_ok = tray_host && tray::spawn(ui_tx, cc.egui_ctx.clone(), visible.clone());
+        let toast = (config.start_hidden && !start_hidden)
+            .then(|| ("No tray host found — window opened".to_owned(), Instant::now()));
 
         Self {
             backend,
@@ -254,7 +252,6 @@ impl App {
             main_mute: false,
             ui_rx,
             visible,
-            hidden: false,
             quit: false,
             start_hidden_done: !start_hidden,
             dirty_save: false,
@@ -262,7 +259,7 @@ impl App {
             mix_dirty: false,
             settings_dirty: false,
             last_sync: Instant::now(),
-            toast: None,
+            toast,
             matrix_selected: None,
             last_frame: Instant::now(),
             tray_ok,
@@ -351,7 +348,6 @@ impl App {
 
     fn show_window(&mut self, ctx: &egui::Context) {
         self.visible.store(true, Ordering::Relaxed);
-        self.hidden = false;
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
@@ -359,7 +355,6 @@ impl App {
 
     fn hide_window(&mut self, ctx: &egui::Context) {
         self.visible.store(false, Ordering::Relaxed);
-        self.hidden = true;
         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
     }
 
@@ -1760,10 +1755,18 @@ impl App {
                 self.mark_config();
             }
             let mut start_hidden = self.config.start_hidden;
-            if checkbox(ui, &mut start_hidden, "Start hidden (tray only)") {
-                self.config.start_hidden = start_hidden;
-                self.mark_config();
-            }
+            let tray_ok = self.tray_ok;
+            let label = if tray_ok {
+                "Start in the tray"
+            } else {
+                "Start in the tray (no tray host found)"
+            };
+            ui.add_enabled_ui(tray_ok, |ui| {
+                if checkbox(ui, &mut start_hidden, label) {
+                    self.config.start_hidden = start_hidden;
+                    self.mark_config();
+                }
+            });
             ui.add_space(2.0);
             ui.label(
                 egui::RichText::new(format!(
@@ -2131,6 +2134,9 @@ impl eframe::App for App {
             self.handle_event(event);
         }
 
+        // eframe shows the window after the first painted frame, so a tray-only
+        // start unmaps it here; the viewport builder also opens it hidden to avoid
+        // a flash of an unpainted window during startup.
         if !self.start_hidden_done {
             self.start_hidden_done = true;
             self.hide_window(ctx);
