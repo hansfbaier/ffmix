@@ -1,7 +1,7 @@
 # Maintainer: Hans Baier <foss@hans-baier.de>
 
 pkgname=ffmix
-pkgver=0.1.6
+pkgver=0.1.7
 pkgrel=1
 pkgdesc='Independent TotalMix-style DSP mixer and tray app for the RME Fireface 800'
 arch=('x86_64')
@@ -21,7 +21,7 @@ depends=(
 makedepends=('rust' 'pkgconf')
 options=('!strip' '!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
-sha256sums=('41efc249304d694806312a1aa040bac0fae4cc1b281be952fa1f7a8c7f5fb065')
+sha256sums=('e02d12abdd3ba2823e6dad0503ed9c80bf5798c6e4b7b1b389ef176402a39719')
 
 build() {
   cd "$pkgname-$pkgver"
