@@ -1,6 +1,7 @@
 //! FFMix — independent TotalMix FX-style control for the RME Fireface 800.
 //! Not affiliated with or endorsed by RME; no RME code or assets are included.
 
+mod activation;
 mod app;
 mod backend;
 mod ff800;
@@ -11,8 +12,6 @@ mod persist;
 mod tray;
 mod widgets;
 
-use std::fs::OpenOptions;
-use std::os::fd::AsRawFd;
 use std::sync::Arc;
 
 use app::App;
@@ -40,7 +39,8 @@ fn main() -> eframe::Result<()> {
              when a StatusNotifier host (KDE, GNOME AppIndicator, waybar, ...) is on\n\
              the session bus. --minimized forces that. Without a tray host the\n\
              window opens, and it can be closed to the tray once a host appears.\n\
-             Quit from the tray menu or the application menu (⋯ → Quit).\n\
+             Starting ffmix again raises the window of the instance that is already\n\
+             running. Quit from the tray menu or the application menu (⋯ → Quit).\n\
              \n\
              Not affiliated with or endorsed by RME. No RME code or assets are included.",
             env!("CARGO_PKG_VERSION")
@@ -57,11 +57,11 @@ fn main() -> eframe::Result<()> {
         return Ok(());
     }
 
-    let _lock = match single_instance() {
-        Some(lock) => lock,
-        None => {
-            eprintln!("ffmix: another instance is already running");
-            std::process::exit(1);
+    let activation = match activation::claim() {
+        activation::Instance::Primary(listener) => listener,
+        activation::Instance::Raised => {
+            eprintln!("ffmix: asked the running instance to show its window");
+            return Ok(());
         }
     };
 
@@ -94,7 +94,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "FFMix — Fireface 800",
         options,
-        Box::new(move |cc| Ok(Box::new(App::new(cc, start_hidden, tray_host)))),
+        Box::new(move |cc| Ok(Box::new(App::new(cc, start_hidden, tray_host, activation)))),
     )
 }
 
@@ -154,16 +154,6 @@ fn write_test() {
         }
         Err(e) => println!("open: {e}"),
     }
-}
-
-fn single_instance() -> Option<std::fs::File> {
-    // SAFETY: getuid takes no arguments, has no preconditions and cannot fail.
-    let path = format!("/tmp/ffmix-{}.lock", unsafe { libc::getuid() });
-    let file = OpenOptions::new().create(true).write(true).truncate(false).open(path).ok()?;
-    // SAFETY: the fd is owned and live here; flock consumes no memory and LOCK_NB
-    // never blocks the calling thread.
-    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-    (rc == 0).then_some(file)
 }
 
 fn app_icon() -> egui::IconData {

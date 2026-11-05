@@ -3,7 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ksni::menu::StandardItem;
 use ksni::{Icon, MenuItem, Tray, TrayService};
@@ -51,10 +51,50 @@ pub fn available() -> bool {
     }
 }
 
-pub fn spawn(tx: Sender<UiCmd>, ctx: egui::Context, visible: Arc<AtomicBool>) -> bool {
+pub fn spawn(tx: Sender<UiCmd>, ctx: egui::Context, visible: Arc<AtomicBool>) {
     let tray = MixerTray { tx, ctx, visible };
     TrayService::new(tray).spawn();
-    true
+}
+
+/// Wait until the watcher lists this process' item, so callers can avoid hiding
+/// the window behind an icon that never appeared.
+pub fn wait_registered(timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if registered() {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(40));
+    }
+}
+
+/// True when the StatusNotifierWatcher lists this process' tray item.
+pub fn registered() -> bool {
+    let Some(items) = registered_items() else {
+        return false;
+    };
+    let prefix = format!("org.kde.StatusNotifierItem-{}-", std::process::id());
+    items.iter().any(|item| item.starts_with(&prefix))
+}
+
+fn registered_items() -> Option<Vec<String>> {
+    let conn = dbus::blocking::Connection::new_session().ok()?;
+    let proxy = conn.with_proxy(
+        "org.kde.StatusNotifierWatcher",
+        "/StatusNotifierWatcher",
+        Duration::from_millis(500),
+    );
+    let value: (dbus::arg::Variant<Vec<String>>,) = proxy
+        .method_call(
+            "org.freedesktop.DBus.Properties",
+            "Get",
+            ("org.kde.StatusNotifierWatcher", "RegisteredStatusNotifierItems"),
+        )
+        .ok()?;
+    Some(value.0.0)
 }
 
 struct MixerTray {

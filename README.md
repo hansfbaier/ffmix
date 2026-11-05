@@ -308,20 +308,25 @@ the window cannot be restored from the tray after hiding.
 Tray-first start needs a StatusNotifierWatcher on the session bus. FFMix checks
 `org.kde.StatusNotifierWatcher` / `org.freedesktop.StatusNotifierWatcher` before hiding
 the window; if neither name has an owner, the window opens so the mixer stays reachable.
+The same guard applies when the window is closed: FFMix only hides to the tray while its
+tray item is registered with the watcher, so a missing or dropped icon cannot strand the
+window. Starting `ffmix` again connects to the running instance over a socket in
+`$XDG_RUNTIME_DIR` and raises its window instead of exiting behind a lock.
 
 ## Project layout
 
 ```text
 src/
-  main.rs      CLI, single-instance lock, X11 preference, eframe bootstrap
-  app.rs       egui views: mixer, matrix, settings, presets, tray commands
-  model.rs     mix model, sends/pan/mute/solo, fader taper, channel naming
-  ff800.rs     FF800 register interface, settings words, status, meter decode
-  fw.rs        firewire-cdev async transport, bus-reset handling
-  backend.rs   I/O worker: diffed DSP writes, status and meter polling
-  widgets.rs   custom faders, knobs, meters, theme
-  tray.rs      StatusNotifierItem icon and menu
-  persist.rs   JSON state in ~/.config/ffmix
+  main.rs       CLI, X11 preference, eframe bootstrap
+  activation.rs single-instance socket; a second launch raises the window
+  app.rs        egui views: mixer, matrix, settings, presets, tray commands
+  model.rs      mix model, sends/pan/mute/solo, fader taper, channel naming
+  ff800.rs      FF800 register interface, settings words, status, meter decode
+  fw.rs         firewire-cdev async transport, bus-reset handling
+  backend.rs    I/O worker: diffed DSP writes, status and meter polling
+  widgets.rs    custom faders, knobs, meters, theme
+  tray.rs       StatusNotifierItem icon and menu
+  persist.rs    JSON state in ~/.config/ffmix
 docs/
   assets/banner.svg
   screenshots/{mixer-vu,matrix-vu,matrix-vu-detail,settings-flash}.png

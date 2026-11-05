@@ -1,14 +1,17 @@
 //! egui application: mixer, matrix and settings views, plus tray glue.
 //! Independent interoperability project; not affiliated with RME.
 
+use std::io::Read;
+use std::os::unix::net::UnixListener;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::{Align2, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 
+use crate::activation;
 use crate::backend::{Backend, Command, Event};
 use crate::ff800::{
     ClockSource, DeviceSettings, InLevel, Jack, MeterFrame, OutLevel, StatusInfo, SyncState,
@@ -191,6 +194,7 @@ pub struct App {
     dim: bool,
     main_mute: bool,
     ui_rx: Receiver<UiCmd>,
+    ui_tx: Sender<UiCmd>,
     visible: Arc<AtomicBool>,
     quit: bool,
     /// Set once the tray-only start has hidden the window (see `update`).
@@ -204,10 +208,19 @@ pub struct App {
     matrix_selected: Option<(usize, usize)>,
     last_frame: Instant,
     tray_ok: bool,
+    /// Retry throttle for registering the tray icon after a failed start.
+    tray_check: Instant,
+    /// Single-instance socket: a second launch asks this instance for the window.
+    activation: UnixListener,
 }
 
 impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>, start_hidden: bool, tray_host: bool) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        start_hidden: bool,
+        tray_host: bool,
+        activation: UnixListener,
+    ) -> Self {
         widgets::apply_theme(&cc.egui_ctx);
 
         let config = persist::load_config();
@@ -228,9 +241,23 @@ impl App {
 
         let (ui_tx, ui_rx) = mpsc::channel();
         let visible = Arc::new(AtomicBool::new(!start_hidden));
-        let tray_ok = tray_host && tray::spawn(ui_tx, cc.egui_ctx.clone(), visible.clone());
-        let toast = (config.start_hidden && !start_hidden)
-            .then(|| ("No tray host found — window opened".to_owned(), Instant::now()));
+        if tray_host {
+            tray::spawn(ui_tx.clone(), cc.egui_ctx.clone(), visible.clone());
+        }
+        let tray_ok = tray_host && tray::wait_registered(Duration::from_millis(700));
+        // A window hidden behind an icon that never registered cannot be reached.
+        let start_hidden = start_hidden && tray_ok;
+        if !start_hidden {
+            visible.store(true, Ordering::Relaxed);
+            cc.egui_ctx
+                .send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        }
+        let toast = (config.start_hidden && !start_hidden).then(|| {
+            (
+                "No tray icon — window opened".to_owned(),
+                Instant::now(),
+            )
+        });
 
         Self {
             backend,
@@ -251,6 +278,7 @@ impl App {
             dim: false,
             main_mute: false,
             ui_rx,
+            ui_tx,
             visible,
             quit: false,
             start_hidden_done: !start_hidden,
@@ -263,6 +291,8 @@ impl App {
             matrix_selected: None,
             last_frame: Instant::now(),
             tray_ok,
+            tray_check: Instant::now(),
+            activation,
         }
     }
 
@@ -1953,6 +1983,24 @@ impl eframe::App for App {
         let _ = dt;
         self.last_frame = now;
 
+        // A second launch connects here instead of exiting behind the lock.
+        if let Ok((mut stream, _)) = self.activation.accept() {
+            let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
+            let mut buf = [0u8; 32];
+            let _ = stream.read(&mut buf);
+            self.show_window(ctx);
+            self.toast("FFMix is already running — window raised");
+        }
+
+        // The tray host may appear after launch; retry the icon then.
+        if !self.tray_ok && self.tray_check.elapsed() >= Duration::from_secs(5) {
+            self.tray_check = Instant::now();
+            if tray::available() {
+                tray::spawn(self.ui_tx.clone(), ctx.clone(), self.visible.clone());
+                self.tray_ok = tray::wait_registered(Duration::from_millis(400));
+            }
+        }
+
         // Keyboard control for accessibility and for setups without a mouse.
         let ctrl = ctx.input(|i| i.modifiers.ctrl);
         let ctrl_shift = ctx.input(|i| i.modifiers.ctrl && i.modifiers.shift);
@@ -2120,6 +2168,10 @@ impl eframe::App for App {
         if ctx.input(|i| i.viewport().close_requested()) {
             if self.quit || !self.config.close_to_tray {
                 // allow close
+            } else if !self.tray_ok || !tray::registered() {
+                // Hiding without a tray icon strands the window.
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.toast("No tray icon — window stays open");
             } else {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.hide_window(ctx);
@@ -2180,6 +2232,7 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        activation::remove_socket();
         self.sync_now();
         self.save_all();
     }
