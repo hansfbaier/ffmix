@@ -167,8 +167,10 @@ to hide it again; use the tray icon to restore. `Ctrl+Q` or the tray menu quits.
 - **Matrix** — inputs → outputs and playback → outputs, up to 28 × 28 cells. Rows are
   source strips and columns are output strips, as in TotalMix. A stereo-linked pair is
   one row or column; unlink it and its two channels split into separate rows or
-  columns. Editing a cell of a linked strip writes both channels, so a pair cell still
-  behaves like a pair. Click toggles between 0 dB and -∞, scroll adjusts ±0.5 dB,
+  columns. A cell from a linked source strip to a linked output strip connects left to
+  left and right to right only: there are no L→R or R→L sends, so unlinking later never
+  reveals cross connections. Mono strips fan out to both channels. Click toggles
+  between 0 dB and -∞, scroll adjusts ±0.5 dB,
   right-click clears. Arrow keys move the selection, `Enter` toggles, `Backspace`
   clears, `+`/`-` trim. Every connected cell has a live VU meter; see
   [Matrix metering](#matrix-metering) below.

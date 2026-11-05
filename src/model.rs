@@ -241,9 +241,28 @@ fn expand_out(pair: &[OutV1; N_PAIRS]) -> [OutMaster; N_OUT] {
     channel
 }
 
+fn clear_cross<const N: usize>(
+    sends: &mut [[Send; N_OUT]; N],
+    stereo_src: &[bool; N_PAIRS],
+    stereo_out: &[bool; N_PAIRS],
+) {
+    for (c, row) in sends.iter_mut().enumerate() {
+        if !stereo_src[c / 2] {
+            continue;
+        }
+        for (p, linked) in stereo_out.iter().enumerate() {
+            if !linked {
+                continue;
+            }
+            let cross = if c % 2 == 0 { 2 * p + 1 } else { 2 * p };
+            row[cross] = Send::default();
+        }
+    }
+}
+
 impl MixState {
     pub fn from_v1(v1: MixStateV1) -> Self {
-        Self {
+        let mut state = Self {
             version: 2,
             selected: (v1.selected * 2).min(N_OUT - 1),
             stereo_in: v1.stereo_in,
@@ -257,13 +276,15 @@ impl MixState {
             sends_play: expand_sends(&v1.sends_play),
             out: expand_out(&v1.out),
             groups: v1.groups,
-        }
+        };
+        state.clear_cross_connections();
+        state
     }
 }
 
 impl Mix {
     pub fn from_v1(v1: MixV1) -> Self {
-        Self {
+        let mut mix = Self {
             stereo_in: v1.stereo_in,
             stereo_play: v1.stereo_play,
             stereo_out: [true; N_PAIRS],
@@ -273,7 +294,14 @@ impl Mix {
             sends_play: expand_sends(&v1.sends_play),
             out: expand_out(&v1.out),
             groups: v1.groups,
-        }
+        };
+        mix.clear_cross_connections();
+        mix
+    }
+
+    pub fn clear_cross_connections(&mut self) {
+        clear_cross(&mut self.sends_in, &self.stereo_in, &self.stereo_out);
+        clear_cross(&mut self.sends_play, &self.stereo_play, &self.stereo_out);
     }
 }
 
@@ -579,11 +607,6 @@ impl MixState {
         }
     }
 
-    /// Output channels of the selected submix strip.
-    pub fn selected_out_channels(&self) -> Vec<usize> {
-        self.strip_channels(Kind::Out, self.selected)
-    }
-
     pub fn strip_db(&self, kind: Kind, idx: usize) -> Option<f32> {
         match kind {
             Kind::Out => self.out.get(idx).and_then(|o| o.gain),
@@ -598,7 +621,7 @@ impl MixState {
             Some(d) if d <= FADER_MIN_DB => None,
             other => other,
         };
-        let outs = self.selected_out_channels();
+        let targets = self.send_targets(kind, idx, self.selected);
         match kind {
             Kind::Out => {
                 for c in self.strip_channels(Kind::Out, idx) {
@@ -608,20 +631,16 @@ impl MixState {
                 }
             }
             Kind::In => {
-                for c in self.strip_channels(Kind::In, idx) {
+                for (c, o) in targets {
                     if c < N_IN {
-                        for &o in &outs {
-                            self.sends_in[c][o].db = val;
-                        }
+                        self.sends_in[c][o].db = val;
                     }
                 }
             }
             Kind::Play => {
-                for c in self.strip_channels(Kind::Play, idx) {
+                for (c, o) in targets {
                     if c < N_PLAY {
-                        for &o in &outs {
-                            self.sends_play[c][o].db = val;
-                        }
+                        self.sends_play[c][o].db = val;
                     }
                 }
             }
@@ -639,24 +658,20 @@ impl MixState {
 
     pub fn set_strip_pan(&mut self, kind: Kind, idx: usize, pan: f32) {
         let pan = pan.clamp(-1.0, 1.0);
-        let outs = self.selected_out_channels();
+        let targets = self.send_targets(kind, idx, self.selected);
         match kind {
             Kind::Out => {}
             Kind::In => {
-                for c in self.strip_channels(Kind::In, idx) {
+                for (c, o) in targets {
                     if c < N_IN {
-                        for &o in &outs {
-                            self.sends_in[c][o].pan = pan;
-                        }
+                        self.sends_in[c][o].pan = pan;
                     }
                 }
             }
             Kind::Play => {
-                for c in self.strip_channels(Kind::Play, idx) {
+                for (c, o) in targets {
                     if c < N_PLAY {
-                        for &o in &outs {
-                            self.sends_play[c][o].pan = pan;
-                        }
+                        self.sends_play[c][o].pan = pan;
                     }
                 }
             }
@@ -679,6 +694,7 @@ impl MixState {
     }
 
     /// Toggle the stereo link of an output pair, keeping the left master gain.
+    /// Linking keeps each channel's own route and drops cross sends.
     pub fn toggle_stereo_out(&mut self, pair: usize) {
         if pair >= N_PAIRS {
             return;
@@ -688,7 +704,49 @@ impl MixState {
         if linked {
             let left = self.out[2 * pair];
             self.out[2 * pair + 1] = left;
+            self.clear_cross_connections();
         }
+    }
+
+    /// Toggle the stereo link of an input pair.
+    pub fn toggle_stereo_in(&mut self, pair: usize) {
+        if pair >= N_PAIRS {
+            return;
+        }
+        self.stereo_in[pair] = !self.stereo_in[pair];
+        self.clear_cross_connections();
+    }
+
+    /// Toggle the stereo link of a playback pair.
+    pub fn toggle_stereo_play(&mut self, pair: usize) {
+        if pair >= N_PAIRS {
+            return;
+        }
+        self.stereo_play[pair] = !self.stereo_play[pair];
+        self.clear_cross_connections();
+    }
+
+    /// Send targets for a matrix cell: a linked source strip into a linked
+    /// output strip connects L->L and R->R only, never L->R or R->L.
+    pub fn send_targets(&self, kind: Kind, src: usize, out: usize) -> Vec<(usize, usize)> {
+        let srcs = self.strip_channels(kind, src);
+        let outs = self.strip_channels(Kind::Out, out);
+        if srcs.len() == 2 && outs.len() == 2 {
+            return vec![(srcs[0], outs[0]), (srcs[1], outs[1])];
+        }
+        let mut targets = Vec::with_capacity(srcs.len() * outs.len());
+        for s in srcs {
+            for &o in &outs {
+                targets.push((s, o));
+            }
+        }
+        targets
+    }
+
+    /// Remove cross sends (L->R, R->L) wherever both sides are linked pairs.
+    pub fn clear_cross_connections(&mut self) {
+        clear_cross(&mut self.sends_in, &self.stereo_in, &self.stereo_out);
+        clear_cross(&mut self.sends_play, &self.stereo_play, &self.stereo_out);
     }
 
     pub fn group_follow(&mut self, key: &str, old_db: Option<f32>, new_db: Option<f32>) -> Vec<String> {
@@ -822,5 +880,90 @@ mod tests {
         assert!(state.stereo_out[1]);
         assert_eq!(state.strip_channels(Kind::Out, 2), vec![2, 3]);
         assert_eq!(state.out[3].gain, Some(-12.0));
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+
+    #[test]
+    fn linked_pairs_connect_straight_only() {
+        let mut state = MixState::default();
+        state.stereo_play[0] = true;
+        state.stereo_out[0] = true;
+        let targets = state.send_targets(Kind::Play, 0, 0);
+        assert_eq!(targets, vec![(0, 0), (1, 1)]);
+        for (src, out) in targets {
+            state.sends_play[src][out].db = Some(-6.0);
+        }
+        assert_eq!(state.sends_play[0][1].db, None);
+        assert_eq!(state.sends_play[1][0].db, None);
+        // Unlinking the output must not reveal cross connections.
+        state.stereo_out[0] = false;
+        assert_eq!(state.sends_play[0][1].db, None);
+        assert_eq!(state.sends_play[1][0].db, None);
+        assert_eq!(state.sends_play[0][0].db, Some(-6.0));
+        assert_eq!(state.sends_play[1][1].db, Some(-6.0));
+    }
+
+    #[test]
+    fn mono_source_fans_out_to_both_output_channels() {
+        let mut state = MixState::default();
+        state.stereo_play[0] = false;
+        state.stereo_out[0] = true;
+        assert_eq!(state.send_targets(Kind::Play, 0, 0), vec![(0, 0), (0, 1)]);
+        state.stereo_out[0] = false;
+        assert_eq!(state.send_targets(Kind::Play, 0, 0), vec![(0, 0)]);
+    }
+
+    #[test]
+    fn v1_migration_drops_cross_sends() {
+        let mut v1 = MixStateV1::default();
+        v1.stereo_play[0] = true;
+        v1.sends_play[0][0] = Send { db: Some(0.0), pan: 0.0 };
+        v1.sends_play[1][0] = Send { db: Some(0.0), pan: 0.0 };
+        let state = MixState::from_v1(v1);
+        assert_eq!(state.sends_play[0][0].db, Some(0.0));
+        assert_eq!(state.sends_play[1][1].db, Some(0.0));
+        assert_eq!(state.sends_play[0][1].db, None);
+        assert_eq!(state.sends_play[1][0].db, None);
+        // Audio still routes straight through.
+        let g = state.compute_matrix(false);
+        assert!((g[0][N_IN] - 1.0).abs() < 1e-6);
+        assert!((g[1][N_IN + 1] - 1.0).abs() < 1e-6);
+        assert_eq!(g[1][N_IN], 0.0);
+        assert_eq!(g[0][N_IN + 1], 0.0);
+    }
+
+    #[test]
+    fn linking_outputs_keeps_each_channels_own_route() {
+        let mut state = MixState::default();
+        state.stereo_play[0] = false;
+        state.stereo_out[0] = false;
+        state.sends_play = [[Send::default(); N_OUT]; N_PLAY];
+        state.sends_play[0][0] = Send { db: Some(-3.0), pan: 0.0 };
+        state.sends_play[1][1] = Send { db: Some(-9.0), pan: 0.0 };
+        state.toggle_stereo_out(0);
+        assert!(state.stereo_out[0]);
+        assert_eq!(state.sends_play[0][0].db, Some(-3.0));
+        assert_eq!(state.sends_play[1][1].db, Some(-9.0));
+        assert_eq!(state.sends_play[0][1].db, None);
+        assert_eq!(state.sends_play[1][0].db, None);
+    }
+
+    #[test]
+    fn linking_sources_drops_cross_rows() {
+        let mut state = MixState::default();
+        state.stereo_play[0] = false;
+        state.sends_play = [[Send::default(); N_OUT]; N_PLAY];
+        state.sends_play[0][0] = Send { db: Some(0.0), pan: 0.0 };
+        state.sends_play[1][0] = Send { db: Some(0.0), pan: 0.0 };
+        state.toggle_stereo_play(0);
+        assert!(state.stereo_play[0]);
+        assert_eq!(state.sends_play[0][0].db, Some(0.0));
+        assert_eq!(state.sends_play[1][0].db, None);
+        assert_eq!(state.sends_play[0][1].db, None);
+        assert_eq!(state.sends_play[1][1].db, None);
     }
 }

@@ -1007,8 +1007,8 @@ impl App {
         {
             let p = chans[0] / 2;
             match kind {
-                Kind::In => self.mix.stereo_in[p] = !self.mix.stereo_in[p],
-                Kind::Play => self.mix.stereo_play[p] = !self.mix.stereo_play[p],
+                Kind::In => self.mix.toggle_stereo_in(p),
+                Kind::Play => self.mix.toggle_stereo_play(p),
                 Kind::Out => self.mix.toggle_stereo_out(p),
             }
             self.mark_mix();
@@ -1299,13 +1299,9 @@ impl App {
                 let db = self.matrix_strip_db(self.matrix_kind, chans, out_chans);
                 let selected = self.matrix_selected == Some((*s, *o));
                 let fill = cell_color(db);
-                let live = matrix_cell_live(
-                    &matrix_gains,
-                    self.matrix_kind,
-                    chans,
-                    out_chans,
-                    &source_meters,
-                );
+                let targets = self.mix.send_targets(self.matrix_kind, *s, *o);
+                let live =
+                    matrix_cell_live(&matrix_gains, self.matrix_kind, &targets, &source_meters);
                 let activity = widgets::meter_frac(live);
                 painter.rect_filled(cell, 2.0, fill);
                 if activity > 0.005 {
@@ -1479,6 +1475,15 @@ impl App {
 
     /// Loudest send across every channel of a source strip and output strip.
     fn matrix_strip_db(&self, kind: Kind, srcs: &[usize], outs: &[usize]) -> Option<f32> {
+        if srcs.len() == 2 && outs.len() == 2 {
+            return match (
+                self.matrix_cell(kind, srcs[0], outs[0]),
+                self.matrix_cell(kind, srcs[1], outs[1]),
+            ) {
+                (None, None) => None,
+                (a, b) => Some(a.unwrap_or(-80.0).max(b.unwrap_or(-80.0))),
+            };
+        }
         let mut best: Option<f32> = None;
         for &s in srcs {
             for &o in outs {
@@ -1503,25 +1508,21 @@ impl App {
         let db = db
             .map(|d| d.clamp(-80.0, 6.0))
             .filter(|&d| d > -80.0);
-        // Editing a linked row or column edits its partner too.
-        let srcs = linked_strip(&self.mix, kind, src);
-        let outs = linked_strip(&self.mix, Kind::Out, out);
+        // A linked source strip into a linked output strip connects L->L and
+        // R->R; only mono strips fan out to both channels.
+        let targets = self.mix.send_targets(kind, src, out);
         match kind {
             Kind::In => {
-                for c in srcs {
+                for (c, o) in targets {
                     if c < N_IN {
-                        for &o in &outs {
-                            self.mix.sends_in[c][o].db = db;
-                        }
+                        self.mix.sends_in[c][o].db = db;
                     }
                 }
             }
             Kind::Play => {
-                for c in srcs {
+                for (c, o) in targets {
                     if c < N_PLAY {
-                        for &o in &outs {
-                            self.mix.sends_play[c][o].db = db;
-                        }
+                        self.mix.sends_play[c][o].db = db;
                     }
                 }
             }
@@ -2336,17 +2337,6 @@ fn out_strips(mix: &MixState, mode: u32) -> Vec<(usize, Vec<usize>)> {
     channel_strips(mix, Kind::Out, mode)
 }
 
-/// Strip channels for matrix editing: a linked channel maps to its pair.
-fn linked_strip(mix: &MixState, kind: Kind, c: usize) -> Vec<usize> {
-    let start = if c % 2 == 0 { c } else { c.saturating_sub(1) };
-    let chans = mix.strip_channels(kind, start);
-    if chans.len() == 2 && chans[0] == start {
-        chans
-    } else {
-        vec![c]
-    }
-}
-
 fn stereo_flag(mix: &MixState, kind: Kind, pair: usize) -> bool {
     let flags = match kind {
         Kind::In => &mix.stereo_in,
@@ -2359,8 +2349,7 @@ fn stereo_flag(mix: &MixState, kind: Kind, pair: usize) -> bool {
 fn matrix_cell_live(
     gains: &[[f32; N_SRC]; N_OUT],
     kind: Kind,
-    src_chans: &[usize],
-    out_chans: &[usize],
+    targets: &[(usize, usize)],
     source: &MeterSnapshot,
 ) -> f32 {
     let base = match kind {
@@ -2369,16 +2358,12 @@ fn matrix_cell_live(
         Kind::Out => return 0.0,
     };
     let mut peak = 0.0f32;
-    for &src in src_chans {
-        if src >= N_SRC - base {
+    for &(src, out) in targets {
+        if src >= N_SRC - base || out >= N_OUT {
             continue;
         }
         let level = source.level.get(src).copied().unwrap_or(0.0);
-        for &out in out_chans {
-            if out < N_OUT {
-                peak = peak.max(level * gains[out][base + src]);
-            }
-        }
+        peak = peak.max(level * gains[out][base + src]);
     }
     peak.clamp(0.0, 2.0)
 }
@@ -2551,9 +2536,15 @@ mod tests {
         gains[0][0] = 0.25;
         gains[0][N_IN] = 0.5;
 
-        assert_eq!(matrix_cell_live(&gains, Kind::In, &[0], &[0], &source), 0.125);
-        assert_eq!(matrix_cell_live(&gains, Kind::Play, &[0], &[0], &source), 0.25);
-        // A linked strip takes the loudest leg.
-        assert_eq!(matrix_cell_live(&gains, Kind::Play, &[0], &[0, 1], &source), 0.25);
+        assert_eq!(matrix_cell_live(&gains, Kind::In, &[(0, 0)], &source), 0.125);
+        assert_eq!(
+            matrix_cell_live(&gains, Kind::Play, &[(0, 0)], &source),
+            0.25
+        );
+        // A mono source fans out to both channels of the pair.
+        assert_eq!(
+            matrix_cell_live(&gains, Kind::Play, &[(0, 0), (0, 1)], &source),
+            0.25
+        );
     }
 }

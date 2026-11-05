@@ -129,13 +129,16 @@ pub fn load_mix() -> MixState {
     let Some(value) = read_json("mix.json") else {
         return MixState::default();
     };
-    if sends_width(&value) == Some(N_OUT) {
+    let mut state = if sends_width(&value) == Some(N_OUT) {
         load_json("mix.json", value).unwrap_or_default()
     } else {
         load_json::<MixStateV1>("mix.json", value)
             .map(MixState::from_v1)
             .unwrap_or_default()
-    }
+    };
+    // Older layouts stored L->R and R->L sends for linked pairs.
+    state.clear_cross_connections();
+    state
 }
 
 pub fn save_mix(st: &MixState) {
@@ -152,7 +155,11 @@ pub fn load_presets() -> PresetBank {
         .and_then(|slots| slots.iter().filter_map(sends_width).next())
         == Some(N_PAIRS);
     if !paired {
-        return load_json("presets.json", value).unwrap_or_default();
+        let mut bank: PresetBank = load_json("presets.json", value).unwrap_or_default();
+        for preset in bank.slots.iter_mut().flatten() {
+            preset.clear_cross_connections();
+        }
+        return bank;
     }
     let Some(old) = load_json::<PresetBankV1>("presets.json", value) else {
         return PresetBank::default();
