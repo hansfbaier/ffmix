@@ -149,6 +149,10 @@ to hide it again; use the tray icon to restore. `Ctrl+Q` or the tray menu quits.
   pairs). Inputs are mono strips; playback and outputs start stereo-linked.
 - **Pan, mute, solo, stereo link** — per-source pan and mute are folded into the gain
   matrix; solo is solo-in-place in the selected submix, like TotalMix.
+- **Mono or stereo outputs** — every output pair has an **ST** toggle like the inputs
+  and playback. Unlinked outputs become independent mono channels with their own
+  master gain, mute and level meter; linked pairs keep one fader, one meter and one
+  matrix cell. A mono output ignores pan, so the send arrives at full level.
 - **Meters** — real hardware values with 26 dB/s release, 1.5 s peak hold, numeric peak
   readout and clip LEDs. Mixer strips use wide stereo VU bars; click a meter to reset
   its peak.
@@ -160,10 +164,13 @@ to hide it again; use the tray icon to restore. `Ctrl+Q` or the tray menu quits.
 - **Presets** — eight slots. `F1`…`F8` recall, `Shift+F1`…`F8` store, or use the
   **STORE** button and the lit slot buttons. Presets live in JSON and contain the mix,
   not the device configuration.
-- **Matrix** — inputs → outputs and playback → outputs, 14 × 14 cells. Click toggles
-  between 0 dB and -∞, scroll adjusts ±0.5 dB, right-click clears. Arrow keys move the
-  selection, `Enter` toggles, `Backspace` clears, `+`/`-` trim. Rows are sources and
-  columns are outputs, as in TotalMix. Every connected cell has a live VU meter; see
+- **Matrix** — inputs → outputs and playback → outputs, up to 28 × 28 cells. Rows are
+  source strips and columns are output strips, as in TotalMix. A stereo-linked pair is
+  one row or column; unlink it and its two channels split into separate rows or
+  columns. Editing a cell of a linked strip writes both channels, so a pair cell still
+  behaves like a pair. Click toggles between 0 dB and -∞, scroll adjusts ±0.5 dB,
+  right-click clears. Arrow keys move the selection, `Enter` toggles, `Backspace`
+  clears, `+`/`-` trim. Every connected cell has a live VU meter; see
   [Matrix metering](#matrix-metering) below.
 
 ### Matrix metering
@@ -176,10 +183,10 @@ to hide it again; use the tray icon to restore. `Ctrl+Q` or the tray menu quits.
 
 The matrix is a live display, not just a routing grid:
 
-- **Source rails (rows)** show the selected source group's live pair level, peak hold,
-  clip cap and dBFS value. Click a rail to reset its peak.
-- **Output rails (columns)** show each hardware output pair's post-master level, peak
-  hold, clip cap and dBFS value.
+- **Source rails (rows)** show each source strip's live level, peak hold, clip cap and
+  dBFS value. Click a rail to reset its peak.
+- **Output rails (columns)** show each output strip's post-master level, peak hold,
+  clip cap and dBFS value.
 - **Cell VUs** exist in every cell with a non-∞ send. The groove fills with
   `source level × actual routed gain`; mute, solo, pan and stereo links are folded in.
   A silent but connected cell keeps its gauge visible; a cell with no send has no meter
@@ -227,7 +234,7 @@ currently set.
 | Fader | Drag; `Ctrl` = fine; double-click or `Alt`+click = 0 dB; wheel = ±1 dB |
 | Pan | Drag the knob; double-click = centre; wheel |
 | Mute / Solo | `M` / `S` on a strip |
-| Stereo link | `ST` on input/playback strips |
+| Stereo link | `ST` on input, playback and output strips |
 | Fader group | Right-click a strip → Fader group 1–4 |
 | Preset recall / store | `F1`…`F8` / `Shift+F1`…`F8` |
 | Mixer / Matrix / Settings | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` |

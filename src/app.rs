@@ -110,11 +110,6 @@ impl MeterBank {
         }
     }
 
-    fn reset_pair(&mut self, pair: usize) {
-        self.reset(pair * 2);
-        self.reset(pair * 2 + 1);
-    }
-
     fn snapshot(&self) -> MeterSnapshot {
         MeterSnapshot {
             level: self.level,
@@ -317,14 +312,16 @@ impl App {
 
     fn backend_mix(&self) -> MixState {
         let mut m = self.mix.clone();
-        let main = self.config.main_pair.min(N_PAIRS - 1);
-        if self.dim {
-            if let Some(gain) = m.out[main].gain {
-                m.out[main].gain = Some(gain - 20.0);
+        let pair = self.config.main_pair.min(N_PAIRS - 1);
+        for c in [2 * pair, 2 * pair + 1] {
+            if self.dim {
+                if let Some(gain) = m.out[c].gain {
+                    m.out[c].gain = Some(gain - 20.0);
+                }
             }
-        }
-        if self.main_mute {
-            m.out[main].mute = true;
+            if self.main_mute {
+                m.out[c].mute = true;
+            }
         }
         m
     }
@@ -352,7 +349,7 @@ impl App {
         if slot >= N_SLOTS {
             return;
         }
-        self.presets.slots[slot] = Some(Mix::from_state(&self.mix));
+        self.presets.slots[slot] = Some(Box::new(Mix::from_state(&self.mix)));
         self.active_slot = Some(slot);
         self.store_armed = false;
         self.dirty_save = true;
@@ -443,7 +440,7 @@ impl App {
             Event::FlashMixer(mixer) => {
                 self.mix.sends_in = mixer.sends_in;
                 self.mix.sends_play = mixer.sends_play;
-                for (out, saved) in self.mix.out.iter_mut().zip(mixer.out) {
+                for (out, saved) in self.mix.out.iter_mut().zip(mixer.out.iter()) {
                     out.gain = saved.gain;
                 }
                 self.mark_mix();
@@ -573,17 +570,17 @@ impl App {
                             .color(MUTED),
                     );
                     let mode = speed_mode(self.status.rate);
-                    let present = channels(Kind::Out, mode).len() / 2;
+                    let strips = out_strips(&self.mix, mode);
                     let mut selected = self.mix.selected;
                     egui::ComboBox::from_id_salt("submix")
                         .width(132.0)
-                        .selected_text(pair_label(Kind::Out, selected.min(N_PAIRS - 1)))
+                        .selected_text(out_strip_label(&self.mix, selected))
                         .show_ui(ui, |ui| {
-                            for pair in 0..present.min(N_PAIRS) {
+                            for (c, chans) in &strips {
                                 ui.selectable_value(
                                     &mut selected,
-                                    pair,
-                                    pair_label(Kind::Out, pair),
+                                    *c,
+                                    strip_label(Kind::Out, chans),
                                 );
                             }
                         });
@@ -594,7 +591,7 @@ impl App {
                     ui.label(
                         egui::RichText::new(format!(
                             "inputs and playback feed {}",
-                            pair_label(Kind::Out, self.mix.selected.min(N_PAIRS - 1))
+                            out_strip_label(&self.mix, self.mix.selected)
                         ))
                         .size(9.5)
                         .color(DIMTEXT),
@@ -745,7 +742,7 @@ impl App {
         let sub = match kind {
             Kind::In | Kind::Play => format!(
                 "feed ▸ {}",
-                pair_label(Kind::Out, self.mix.selected.min(N_PAIRS - 1))
+                out_strip_label(&self.mix, self.mix.selected)
             ),
             Kind::Out => "master · click a name".to_owned(),
         };
@@ -779,37 +776,25 @@ impl App {
         let top = rect.top() + 3.0;
         let bottom = rect.bottom() - 3.0;
 
-        if kind == Kind::Out {
-            let pairs = chans.len() / 2;
-            for pair in 0..pairs {
-                let w = unit * 2.0;
-                if x + w > rect.right() - 2.0 {
-                    break;
-                }
-                let strip = Rect::from_min_max(Pos2::new(x, top), Pos2::new(x + w - 2.0, bottom));
-                self.draw_strip(ui, strip, kind, pair, &[chans[2 * pair], chans[2 * pair + 1]]);
-                x += w;
+        let mut i = 0usize;
+        while i < chans.len() {
+            let c = chans[i];
+            let linked = c % 2 == 0
+                && c / 2 < N_PAIRS
+                && self.stereo(kind)[c / 2]
+                && chans.get(i + 1) == Some(&(c + 1));
+            let take = if linked { 2 } else { 1 };
+            if x + unit * take as f32 > rect.right() - 2.0 {
+                break;
             }
-        } else {
-            let mut i = 0usize;
-            while i < chans.len() {
-                let c = chans[i];
-                let linked = c % 2 == 0
-                    && self.stereo(kind)[c / 2]
-                    && chans.get(i + 1) == Some(&(c + 1));
-                let take = if linked { 2 } else { 1 };
-                if x + unit * take as f32 > rect.right() - 2.0 {
-                    break;
-                }
-                let strip = Rect::from_min_max(
-                    Pos2::new(x, top),
-                    Pos2::new(x + unit * take as f32 - 2.0, bottom),
-                );
-                let cs: Vec<usize> = chans[i..i + take].to_vec();
-                self.draw_strip(ui, strip, kind, c, &cs);
-                x += unit * take as f32;
-                i += take;
-            }
+            let strip = Rect::from_min_max(
+                Pos2::new(x, top),
+                Pos2::new(x + unit * take as f32 - 2.0, bottom),
+            );
+            let cs: Vec<usize> = chans[i..i + take].to_vec();
+            self.draw_strip(ui, strip, kind, c, &cs);
+            x += unit * take as f32;
+            i += take;
         }
     }
 
@@ -817,7 +802,7 @@ impl App {
         match kind {
             Kind::In => &self.mix.stereo_in,
             Kind::Play => &self.mix.stereo_play,
-            Kind::Out => &self.mix.stereo_in,
+            Kind::Out => &self.mix.stereo_out,
         }
     }
 
@@ -829,18 +814,11 @@ impl App {
         idx: usize,
         chans: &[usize],
     ) {
-        let pair = if kind == Kind::Out { idx } else { chans[0] / 2 };
-        let stereo_strip = kind == Kind::Out || chans.len() == 2;
-        let name = if kind == Kind::Out {
-            pair_label(Kind::Out, pair)
-        } else if chans.len() == 2 {
-            pair_label(kind, pair)
-        } else {
-            chan_label(kind, chans[0])
-        };
+        let stereo_strip = chans.len() == 2;
+        let name = strip_label(kind, chans);
         let key = MixState::strip_key(kind, idx);
         let group = self.mix.groups.get(&key).copied();
-        let selected = kind == Kind::Out && pair == self.mix.selected;
+        let selected = kind == Kind::Out && chans.contains(&self.mix.selected);
         let color = widgets::kind_color(kind);
         let painter = ui.painter().with_clip_rect(rect);
 
@@ -855,7 +833,7 @@ impl App {
                     Kind::Out => "hardware output",
                 },
                 if kind == Kind::Out {
-                    format!("master {}", fmt_db(self.mix.out[pair].gain))
+                    format!("master {}", fmt_db(self.mix.strip_db(kind, idx)))
                 } else {
                     format!("send {}", fmt_db(self.mix.strip_db(kind, idx)))
                 },
@@ -863,7 +841,7 @@ impl App {
             ));
         let clicked = hover.clicked();
         if kind == Kind::Out && clicked {
-            self.mix.selected = pair;
+            self.mix.selected = chans[0];
             self.mark_mix();
         }
         let mut group_choice: Option<Option<u8>> = None;
@@ -949,7 +927,7 @@ impl App {
         let muted = match kind {
             Kind::In => chans.iter().any(|&c| self.mix.mute_in[c]),
             Kind::Play => chans.iter().any(|&c| self.mix.mute_play[c]),
-            Kind::Out => self.mix.out[pair].mute,
+            Kind::Out => self.mix.out_muted(idx),
         };
         let soloed = match kind {
             Kind::In => chans.iter().any(|&c| self.mix.solo_in[c]),
@@ -979,7 +957,10 @@ impl App {
                         self.mix.mute_play[c] = new;
                     }
                 }
-                Kind::Out => self.mix.out[pair].mute = !self.mix.out[pair].mute,
+                Kind::Out => {
+                    let mute = !self.mix.out_muted(idx);
+                    self.mix.set_out_muted(idx, mute);
+                }
             }
             self.mark_mix();
         }
@@ -1013,24 +994,24 @@ impl App {
                 self.mark_mix();
             }
             bx += btn_w + 2.0;
-            if widgets::small_toggle(
-                ui,
-                Id::new(("st", kind, idx)),
-                Rect::from_min_size(Pos2::new(bx, btn_y), Vec2::new(btn_w, btn_h)),
-                "ST",
-                stereo_strip,
-                BLUE,
-            )
-            .clicked()
-            {
-                let p = chans[0] / 2;
-                match kind {
-                    Kind::In => self.mix.stereo_in[p] = !self.mix.stereo_in[p],
-                    Kind::Play => self.mix.stereo_play[p] = !self.mix.stereo_play[p],
-                    Kind::Out => {}
-                }
-                self.mark_mix();
+        }
+        if widgets::small_toggle(
+            ui,
+            Id::new(("st", kind, idx)),
+            Rect::from_min_size(Pos2::new(bx, btn_y), Vec2::new(btn_w, btn_h)),
+            "ST",
+            stereo_strip,
+            BLUE,
+        )
+        .clicked()
+        {
+            let p = chans[0] / 2;
+            match kind {
+                Kind::In => self.mix.stereo_in[p] = !self.mix.stereo_in[p],
+                Kind::Play => self.mix.stereo_play[p] = !self.mix.stereo_play[p],
+                Kind::Out => self.mix.toggle_stereo_out(p),
             }
+            self.mark_mix();
         }
 
         let mut top_of_fader = btn_y + btn_h + 4.0;
@@ -1159,9 +1140,11 @@ impl App {
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
-                    egui::RichText::new("Click toggles 0 dB / -∞ · scroll ±0.5 dB · right-click clears")
-                        .size(9.5)
-                        .color(MUTED),
+                    egui::RichText::new(
+                        "Linked pairs share a cell · click toggles 0 dB / -∞ · scroll ±0.5 dB",
+                    )
+                    .size(9.5)
+                    .color(MUTED),
                 );
                 ui.add_space(10.0);
                 live_badge(ui, live_any);
@@ -1174,24 +1157,25 @@ impl App {
             avail.min,
             Pos2::new(avail.right(), (avail.bottom() - inspector_h).max(avail.top() + 40.0)),
         );
-        let chans = channels(self.matrix_kind, mode);
-        let npairs = (chans.len() / 2).max(1).min(N_PAIRS);
+        let src_strips = channel_strips(&self.mix, self.matrix_kind, mode);
+        let out_strips = channel_strips(&self.mix, Kind::Out, mode);
+        let nrows = src_strips.len().max(1);
+        let ncols = out_strips.len().max(1);
         let source_meters = self.meters.bank(self.matrix_kind).snapshot();
         let output_meters = self.meters.output.snapshot();
         let matrix_gains = self.mix.compute_matrix(true);
         let source_color = widgets::kind_color(self.matrix_kind);
         let left_w = 74.0;
         let top_h = 46.0;
-        let cw = ((grid_rect.width() - left_w - 8.0) / npairs as f32).clamp(22.0, 112.0);
-        let ch = ((grid_rect.height() - top_h - 8.0) / npairs as f32).clamp(18.0, 66.0);
-        let grid_w = cw * npairs as f32;
+        let cw = ((grid_rect.width() - left_w - 8.0) / ncols as f32).clamp(22.0, 112.0);
+        let ch = ((grid_rect.height() - top_h - 8.0) / nrows as f32).clamp(18.0, 66.0);
+        let grid_w = cw * ncols as f32;
         let gx = grid_rect.left() + left_w + ((grid_rect.width() - left_w - grid_w) * 0.5).max(0.0);
         let gy = grid_rect.top() + top_h;
         let painter = ui.painter().with_clip_rect(grid_rect);
         painter.rect_filled(grid_rect, 6.0, PANEL);
         painter.rect_stroke(grid_rect, 6.0, Stroke::new(1.0_f32, BORDER), StrokeKind::Inside);
 
-        // column headers: outputs, one level bar per output pair
         painter.text(
             Pos2::new(grid_rect.left() + 8.0, grid_rect.top() + 4.0),
             Align2::LEFT_TOP,
@@ -1199,19 +1183,25 @@ impl App {
             FontId::proportional(8.0),
             MUTED,
         );
-        for op in 0..npairs {
-            let x = gx + op as f32 * cw;
-            let label = pair_label(Kind::Out, op);
+        // Column headers: one column per output strip (pair or mono channel).
+        for (i, (_, chans)) in out_strips.iter().enumerate() {
+            let x = gx + i as f32 * cw;
             painter.text(
                 Pos2::new(x + cw * 0.5, grid_rect.top() + 4.0),
                 Align2::CENTER_TOP,
-                label,
+                strip_label(Kind::Out, chans),
                 FontId::proportional(8.0),
                 MUTED,
             );
-            let level = output_meters.level[2 * op].max(output_meters.level[2 * op + 1]);
-            let hold = output_meters.hold[2 * op].max(output_meters.hold[2 * op + 1]);
-            let clip = output_meters.clip[2 * op] || output_meters.clip[2 * op + 1];
+            let level = chans
+                .iter()
+                .map(|&o| output_meters.level[o])
+                .fold(0.0f32, f32::max);
+            let hold = chans
+                .iter()
+                .map(|&o| output_meters.hold[o])
+                .fold(0.0f32, f32::max);
+            let clip = chans.iter().any(|&o| output_meters.clip[o]);
             let meter_rect = Rect::from_min_size(
                 Pos2::new(x + 4.0, grid_rect.top() + 17.0),
                 Vec2::new((cw - 8.0).max(6.0), 4.0),
@@ -1226,34 +1216,46 @@ impl App {
                     MUTED,
                 );
             }
-            let resp = ui.interact(meter_rect, Id::new(("mx-out-meter", op)), Sense::click());
+            let resp = ui.interact(
+                meter_rect,
+                Id::new(("mx-out-meter", i)),
+                Sense::click(),
+            );
             if resp.clicked() {
-                self.meters.output.reset_pair(op);
+                for &o in chans {
+                    self.meters.output.reset(o);
+                }
             }
             if resp.hovered() {
                 resp.on_hover_text(format!(
                     "{} output\nLevel  {}\nPeak  {}{}\nClick to reset peak",
-                    pair_label(Kind::Out, op),
+                    strip_label(Kind::Out, chans),
                     fmt_level(level),
                     fmt_level(hold),
                     if clip { "\nCLIP" } else { "" }
                 ));
             }
         }
-        // row headers + cells: sources are rows, outputs are columns
-        for sp in 0..npairs {
-            let y = gy + sp as f32 * ch;
+        // Rows: one row per source strip (pair or mono channel).
+        for (si, (s, chans)) in src_strips.iter().enumerate() {
+            let y = gy + si as f32 * ch;
             let label_y = if ch >= 30.0 { y + ch * 0.5 - 6.0 } else { y + ch * 0.5 };
             painter.text(
                 Pos2::new(gx - 15.0, label_y),
                 Align2::RIGHT_CENTER,
-                pair_label(self.matrix_kind, sp),
+                strip_label(self.matrix_kind, chans),
                 FontId::proportional(8.2),
                 MUTED,
             );
-            let level = source_meters.level[2 * sp].max(source_meters.level[2 * sp + 1]);
-            let hold = source_meters.hold[2 * sp].max(source_meters.hold[2 * sp + 1]);
-            let clip = source_meters.clip[2 * sp] || source_meters.clip[2 * sp + 1];
+            let level = chans
+                .iter()
+                .map(|&c| source_meters.level[c])
+                .fold(0.0f32, f32::max);
+            let hold = chans
+                .iter()
+                .map(|&c| source_meters.hold[c])
+                .fold(0.0f32, f32::max);
+            let clip = chans.iter().any(|&c| source_meters.clip[c]);
             if ch >= 30.0 && level > 0.001 {
                 painter.text(
                     Pos2::new(gx - 15.0, y + ch * 0.5 + 6.0),
@@ -1270,47 +1272,47 @@ impl App {
             draw_v_meter(&painter, meter_rect, level, hold, clip, source_color);
             let resp = ui.interact(
                 meter_rect,
-                Id::new(("mx-src-meter", self.matrix_kind, sp)),
+                Id::new(("mx-src-meter", self.matrix_kind, si)),
                 Sense::click(),
             );
             if resp.clicked() {
-                match self.matrix_kind {
-                    Kind::In => self.meters.input.reset_pair(sp),
-                    Kind::Play => self.meters.playback.reset_pair(sp),
-                    Kind::Out => {}
+                for &c in chans {
+                    match self.matrix_kind {
+                        Kind::In => self.meters.input.reset(c),
+                        Kind::Play => self.meters.playback.reset(c),
+                        Kind::Out => {}
+                    }
                 }
             }
             if resp.hovered() {
                 resp.on_hover_text(format!(
                     "{} source\nLevel  {}\nPeak  {}{}\nClick to reset peak",
-                    pair_label(self.matrix_kind, sp),
+                    strip_label(self.matrix_kind, chans),
                     fmt_level(level),
                     fmt_level(hold),
                     if clip { "\nCLIP" } else { "" }
                 ));
             }
-            for op in 0..npairs {
-                let x = gx + op as f32 * cw;
+            for (oi, (o, out_chans)) in out_strips.iter().enumerate() {
+                let x = gx + oi as f32 * cw;
                 let cell = Rect::from_min_size(Pos2::new(x, y), Vec2::new(cw - 1.0, ch - 1.0));
-                let (db, db2) = self.matrix_cell(self.matrix_kind, sp, op);
-                let db = match (db, db2) {
-                    (None, None) => None,
-                    (a, b) => Some(a.unwrap_or(-80.0).max(b.unwrap_or(-80.0))),
-                };
-                let selected = self.matrix_selected == Some((sp, op));
+                let db = self.matrix_strip_db(self.matrix_kind, chans, out_chans);
+                let selected = self.matrix_selected == Some((*s, *o));
                 let fill = cell_color(db);
-                let live = matrix_cell_live(&matrix_gains, self.matrix_kind, sp, op, &source_meters);
+                let live = matrix_cell_live(
+                    &matrix_gains,
+                    self.matrix_kind,
+                    chans,
+                    out_chans,
+                    &source_meters,
+                );
                 let activity = widgets::meter_frac(live);
                 painter.rect_filled(cell, 2.0, fill);
                 if activity > 0.005 {
-                    // The FF800 does not expose per-crosspoint meters. This is the
-                    // source level times the routed gain (mute/solo/pan folded in),
-                    // before the output master.
+                    // Source level times the routed gain, before the output master.
                     painter.rect_filled(cell, 2.0, blend(fill, source_color, 0.68 * activity));
                 }
                 if db.is_some() {
-                    // Every connected cell carries a meter groove, even while its
-                    // source is silent; -∞ cells intentionally have none.
                     let track = Rect::from_min_max(
                         Pos2::new(cell.min.x + 3.0, cell.max.y - 5.0),
                         Pos2::new(cell.max.x - 3.0, cell.max.y - 2.0),
@@ -1333,7 +1335,10 @@ impl App {
                 painter.rect_stroke(
                     cell,
                     2.0,
-                    Stroke::new(if selected { 1.6_f32 } else { 1.0_f32 }, if selected { ACCENT } else { Color32::from_black_alpha(80) }),
+                    Stroke::new(
+                        if selected { 1.6_f32 } else { 1.0_f32 },
+                        if selected { ACCENT } else { Color32::from_black_alpha(80) },
+                    ),
                     StrokeKind::Inside,
                 );
                 if cw >= 32.0 {
@@ -1347,27 +1352,31 @@ impl App {
                 }
                 let resp = ui.interact(
                     cell,
-                    Id::new(("mx", self.matrix_kind, sp, op)),
+                    Id::new(("mx", self.matrix_kind, si, oi)),
                     Sense::click_and_drag(),
                 );
                 if resp.clicked() {
-                    self.matrix_selected = Some((sp, op));
+                    self.matrix_selected = Some((*s, *o));
                     let new = if db.is_some() { None } else { Some(0.0) };
-                    self.set_matrix_cell(self.matrix_kind, sp, op, new);
+                    self.set_matrix_cell(self.matrix_kind, *s, *o, new);
                 }
                 if resp.secondary_clicked() {
-                    self.matrix_selected = Some((sp, op));
-                    self.set_matrix_cell(self.matrix_kind, sp, op, None);
+                    self.matrix_selected = Some((*s, *o));
+                    self.set_matrix_cell(self.matrix_kind, *s, *o, None);
                 }
                 if resp.hovered() {
                     let scroll = ui.input(|i| i.raw_scroll_delta.y);
                     if scroll.abs() > 0.1 {
                         let base = db.unwrap_or(-80.0);
-                        let new = if scroll > 0.0 { (base + 0.5).min(6.0) } else { (base - 0.5).max(-80.0) };
+                        let new = if scroll > 0.0 {
+                            (base + 0.5).min(6.0)
+                        } else {
+                            (base - 0.5).max(-80.0)
+                        };
                         self.set_matrix_cell(
                             self.matrix_kind,
-                            sp,
-                            op,
+                            *s,
+                            *o,
                             if new <= -80.0 { None } else { Some(new) },
                         );
                     }
@@ -1379,25 +1388,25 @@ impl App {
                         let new = (base - dy * 0.2).clamp(-80.0, 6.0);
                         self.set_matrix_cell(
                             self.matrix_kind,
-                            sp,
-                            op,
+                            *s,
+                            *o,
                             if new <= -80.0 { None } else { Some(new) },
                         );
                     }
                 }
                 if resp.clicked() || resp.secondary_clicked() {
-                    self.matrix_selected = Some((sp, op));
+                    self.matrix_selected = Some((*s, *o));
                 }
                 if resp.hovered() {
-                    let source_level =
-                        source_meters.level[2 * sp].max(source_meters.level[2 * sp + 1]);
-                    let output_level =
-                        output_meters.level[2 * op].max(output_meters.level[2 * op + 1]);
+                    let output_level = out_chans
+                        .iter()
+                        .map(|&c| output_meters.level[c])
+                        .fold(0.0f32, f32::max);
                     resp.on_hover_text(format!(
                         "{} -> {}\nSource  {}\nSend gain  {}\nCrosspoint  {} (est., pre-master)\nOutput  {} (post-master)",
-                        pair_label(self.matrix_kind, sp),
-                        pair_label(Kind::Out, op),
-                        fmt_level(source_level),
+                        strip_label(self.matrix_kind, chans),
+                        strip_label(Kind::Out, out_chans),
+                        fmt_level(level),
                         fmt_db(db),
                         fmt_level(live),
                         fmt_level(output_level),
@@ -1413,17 +1422,20 @@ impl App {
         );
         ui.scope_builder(egui::UiBuilder::new().max_rect(inspector), |ui| {
             ui.horizontal(|ui| {
-                if let Some((sp, op)) = self.matrix_selected {
-                    let src_name = pair_label(self.matrix_kind, sp);
-                    let out_name = pair_label(Kind::Out, op);
+                if let Some((s, o)) = self.matrix_selected {
+                    let src_strip = self.mix.strip_channels(self.matrix_kind, s);
+                    let out_strip = self.mix.strip_channels(Kind::Out, o);
                     ui.label(
-                        egui::RichText::new(format!("{out_name}  <-  {src_name}"))
-                            .size(11.5)
-                            .color(TEXT),
+                        egui::RichText::new(format!(
+                            "{}  <-  {}",
+                            strip_label(Kind::Out, &out_strip),
+                            strip_label(self.matrix_kind, &src_strip)
+                        ))
+                        .size(11.5)
+                        .color(TEXT),
                     );
-                    let (a, b) = self.matrix_cell(self.matrix_kind, sp, op);
-                    let cur = a.or(b).unwrap_or(-80.0);
-                    let mut v = cur.max(-80.0);
+                    let db = self.matrix_strip_db(self.matrix_kind, &src_strip, &out_strip);
+                    let mut v = db.unwrap_or(-80.0).max(-80.0);
                     let changed = ui
                         .add(
                             egui::Slider::new(&mut v, -40.0..=6.0)
@@ -1433,13 +1445,13 @@ impl App {
                         )
                         .changed();
                     if changed {
-                        self.set_matrix_cell(self.matrix_kind, sp, op, Some(v));
+                        self.set_matrix_cell(self.matrix_kind, s, o, Some(v));
                     }
                     if ui.button("0 dB").clicked() {
-                        self.set_matrix_cell(self.matrix_kind, sp, op, Some(0.0));
+                        self.set_matrix_cell(self.matrix_kind, s, o, Some(0.0));
                     }
                     if ui.button("-∞").clicked() {
-                        self.set_matrix_cell(self.matrix_kind, sp, op, None);
+                        self.set_matrix_cell(self.matrix_kind, s, o, None);
                     }
                 } else {
                     ui.label(
@@ -1449,7 +1461,12 @@ impl App {
                     );
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    for (label, db) in [("+6", Some(6.0)), ("0", Some(0.0)), ("-20", Some(-20.0)), ("-∞", None)] {
+                    for (label, db) in [
+                        ("+6", Some(6.0)),
+                        ("0", Some(0.0)),
+                        ("-20", Some(-20.0)),
+                        ("-∞", None),
+                    ] {
                         let (r, _) = ui.allocate_exact_size(Vec2::new(12.0, 12.0), Sense::hover());
                         ui.painter().rect_filled(r, 2.0, cell_color(db));
                         ui.label(egui::RichText::new(label).size(9.0).color(MUTED));
@@ -1460,39 +1477,52 @@ impl App {
         ui.advance_cursor_after_rect(avail);
     }
 
-    fn matrix_cell(&self, kind: Kind, src_pair: usize, out_pair: usize) -> (Option<f32>, Option<f32>) {
-        let c0 = src_pair * 2;
-        match kind {
-            Kind::In => (
-                self.mix.sends_in.get(c0).map(|s| s[out_pair].db).unwrap_or(None),
-                self.mix.sends_in.get(c0 + 1).map(|s| s[out_pair].db).unwrap_or(None),
-            ),
-            Kind::Play => (
-                self.mix.sends_play.get(c0).map(|s| s[out_pair].db).unwrap_or(None),
-                self.mix.sends_play.get(c0 + 1).map(|s| s[out_pair].db).unwrap_or(None),
-            ),
-            Kind::Out => (None, None),
+    /// Loudest send across every channel of a source strip and output strip.
+    fn matrix_strip_db(&self, kind: Kind, srcs: &[usize], outs: &[usize]) -> Option<f32> {
+        let mut best: Option<f32> = None;
+        for &s in srcs {
+            for &o in outs {
+                if let Some(db) = self.matrix_cell(kind, s, o) {
+                    best = Some(best.map_or(db, |b| b.max(db)));
+                }
+            }
         }
+        best
     }
 
-    fn set_matrix_cell(&mut self, kind: Kind, src_pair: usize, out_pair: usize, db: Option<f32>) {
-        let c0 = src_pair * 2;
-        let db = db.map(|d| d.clamp(-80.0, 6.0)).and_then(|d| if d <= -80.0 { None } else { Some(d) });
+    fn matrix_cell(&self, kind: Kind, src: usize, out: usize) -> Option<f32> {
+        let row = match kind {
+            Kind::In => self.mix.sends_in.get(src),
+            Kind::Play => self.mix.sends_play.get(src),
+            Kind::Out => None,
+        };
+        row.map(|sends| sends[out].db).unwrap_or(None)
+    }
+
+    fn set_matrix_cell(&mut self, kind: Kind, src: usize, out: usize, db: Option<f32>) {
+        let db = db
+            .map(|d| d.clamp(-80.0, 6.0))
+            .filter(|&d| d > -80.0);
+        // Editing a linked row or column edits its partner too.
+        let srcs = linked_strip(&self.mix, kind, src);
+        let outs = linked_strip(&self.mix, Kind::Out, out);
         match kind {
             Kind::In => {
-                if c0 < N_IN {
-                    self.mix.sends_in[c0][out_pair].db = db;
-                }
-                if c0 + 1 < N_IN {
-                    self.mix.sends_in[c0 + 1][out_pair].db = db;
+                for c in srcs {
+                    if c < N_IN {
+                        for &o in &outs {
+                            self.mix.sends_in[c][o].db = db;
+                        }
+                    }
                 }
             }
             Kind::Play => {
-                if c0 < N_PLAY {
-                    self.mix.sends_play[c0][out_pair].db = db;
-                }
-                if c0 + 1 < N_PLAY {
-                    self.mix.sends_play[c0 + 1][out_pair].db = db;
+                for c in srcs {
+                    if c < N_PLAY {
+                        for &o in &outs {
+                            self.mix.sends_play[c][o].db = db;
+                        }
+                    }
                 }
             }
             Kind::Out => {}
@@ -2030,43 +2060,50 @@ impl eframe::App for App {
             let mut changed = false;
             if key(egui::Key::ArrowUp) || key(egui::Key::ArrowDown) {
                 let delta = if key(egui::Key::ArrowUp) { 1.0 } else { -1.0 };
-                let pair = self.mix.selected.min(N_PAIRS - 1);
-                let cur = self.mix.out[pair].gain.unwrap_or(-80.0);
+                let c = self.mix.selected;
+                let cur = self.mix.strip_db(Kind::Out, c).unwrap_or(-80.0);
                 let next = (cur + delta).clamp(-80.0, 6.0);
-                self.mix.out[pair].gain = if next <= -80.0 { None } else { Some(next) };
+                let val = if next <= -80.0 { None } else { Some(next) };
+                self.mix.set_strip_db(Kind::Out, c, val);
                 changed = true;
                 self.toast(format!(
                     "{} master {}",
-                    pair_label(Kind::Out, pair),
-                    fmt_db(self.mix.out[pair].gain)
+                    out_strip_label(&self.mix, c),
+                    fmt_db(self.mix.strip_db(Kind::Out, c))
                 ));
             }
             if key(egui::Key::ArrowLeft) || key(egui::Key::ArrowRight) {
                 let mode = speed_mode(self.status.rate);
-                let present = (channels(Kind::Out, mode).len() / 2).max(1);
-                let cur = self.mix.selected.min(present - 1);
+                let strips = out_strips(&self.mix, mode);
+                let present = strips.len().max(1);
+                let cur = strips
+                    .iter()
+                    .position(|(c, _)| *c == self.mix.selected)
+                    .unwrap_or(0);
                 let next = if key(egui::Key::ArrowRight) {
                     (cur + 1) % present
                 } else {
                     (cur + present - 1) % present
                 };
-                self.mix.selected = next;
+                let (c, chans) = &strips[next];
+                self.mix.selected = *c;
                 changed = true;
-                self.toast(format!("Submix {}", pair_label(Kind::Out, next)));
+                self.toast(format!("Submix {}", strip_label(Kind::Out, chans)));
             }
             if key(egui::Key::M) {
-                let pair = self.mix.selected.min(N_PAIRS - 1);
-                self.mix.out[pair].mute = !self.mix.out[pair].mute;
+                let c = self.mix.selected;
+                let mute = !self.mix.out_muted(c);
+                self.mix.set_out_muted(c, mute);
                 changed = true;
-                self.toast(if self.mix.out[pair].mute {
+                self.toast(if mute {
                     "Main out muted"
                 } else {
                     "Main out unmuted"
                 });
             }
             if key(egui::Key::Num0) {
-                let pair = self.mix.selected.min(N_PAIRS - 1);
-                self.mix.out[pair].gain = Some(0.0);
+                let c = self.mix.selected;
+                self.mix.set_strip_db(Kind::Out, c, Some(0.0));
                 changed = true;
                 self.toast("Main out set to 0.0 dB");
             }
@@ -2114,52 +2151,67 @@ impl eframe::App for App {
         // Matrix keyboard editing: arrows move, Enter toggles 0 dB / -inf.
         if self.tab == Tab::Matrix && !ctrl && !ctx.input(|i| i.modifiers.shift) {
             let mode = speed_mode(self.status.rate);
-            let npairs = (channels(self.matrix_kind, mode).len() / 2).max(1).min(N_PAIRS);
-            let (mut sp, mut op) = self.matrix_selected.unwrap_or((0, 0));
+            let src_strips = channel_strips(&self.mix, self.matrix_kind, mode);
+            let out_strips = channel_strips(&self.mix, Kind::Out, mode);
+            let ns = src_strips.len().max(1);
+            let no = out_strips.len().max(1);
+            let (mut si, mut oi) = match self.matrix_selected {
+                Some((s, o)) => (
+                    src_strips.iter().position(|(c, _)| *c == s).unwrap_or(0),
+                    out_strips.iter().position(|(c, _)| *c == o).unwrap_or(0),
+                ),
+                None => (0, 0),
+            };
+            let mut sc = src_strips.get(si).map(|(c, _)| *c).unwrap_or(0);
+            let mut oc = out_strips.get(oi).map(|(c, _)| *c).unwrap_or(0);
             let key = |k| ctx.input(|i| i.key_pressed(k));
             let mut moved = false;
             if key(egui::Key::ArrowLeft) {
-                op = (op + npairs - 1) % npairs;
+                oi = (oi + no - 1) % no;
                 moved = true;
             }
             if key(egui::Key::ArrowRight) {
-                op = (op + 1) % npairs;
+                oi = (oi + 1) % no;
                 moved = true;
             }
             if key(egui::Key::ArrowUp) {
-                sp = (sp + npairs - 1) % npairs;
+                si = (si + ns - 1) % ns;
                 moved = true;
             }
             if key(egui::Key::ArrowDown) {
-                sp = (sp + 1) % npairs;
+                si = (si + 1) % ns;
                 moved = true;
             }
             if moved {
-                self.matrix_selected = Some((sp, op));
+                sc = src_strips.get(si).map(|(c, _)| *c).unwrap_or(0);
+                oc = out_strips.get(oi).map(|(c, _)| *c).unwrap_or(0);
+                self.matrix_selected = Some((sc, oc));
             }
-            let (a, b) = self.matrix_cell(self.matrix_kind, sp, op);
+            let src_chans = self.mix.strip_channels(self.matrix_kind, sc);
+            let out_chans = self.mix.strip_channels(Kind::Out, oc);
+            let db = self.matrix_strip_db(self.matrix_kind, &src_chans, &out_chans);
             if key(egui::Key::Enter) || key(egui::Key::Space) {
-                self.matrix_selected = Some((sp, op));
-                let new = if a.is_some() || b.is_some() { None } else { Some(0.0) };
-                self.set_matrix_cell(self.matrix_kind, sp, op, new);
+                self.matrix_selected = Some((sc, oc));
+                let new = if db.is_some() { None } else { Some(0.0) };
+                self.set_matrix_cell(self.matrix_kind, sc, oc, new);
             }
             if key(egui::Key::Backspace) || key(egui::Key::Delete) {
-                self.matrix_selected = Some((sp, op));
-                self.set_matrix_cell(self.matrix_kind, sp, op, None);
+                self.matrix_selected = Some((sc, oc));
+                self.set_matrix_cell(self.matrix_kind, sc, oc, None);
             }
             if key(egui::Key::Plus) || key(egui::Key::Equals) {
-                self.matrix_selected = Some((sp, op));
-                let cur = a.or(b).unwrap_or(-80.0);
-                self.set_matrix_cell(self.matrix_kind, sp, op, Some((cur + 0.5).min(6.0)));
+                self.matrix_selected = Some((sc, oc));
+                let cur = db.unwrap_or(-80.0);
+                self.set_matrix_cell(self.matrix_kind, sc, oc, Some((cur + 0.5).min(6.0)));
             }
             if key(egui::Key::Minus) {
-                self.matrix_selected = Some((sp, op));
-                let cur = a.or(b).unwrap_or(-80.0);
+                self.matrix_selected = Some((sc, oc));
+                let cur = db.unwrap_or(-80.0);
                 let new = (cur - 0.5).max(-80.0);
                 self.set_matrix_cell(
                     self.matrix_kind,
-                    sp,
-                    op,
+                    sc,
+                    oc,
                     if new <= -80.0 { None } else { Some(new) },
                 );
             }
@@ -2250,11 +2302,65 @@ fn rate_text(rate: Option<u32>) -> String {
     }
 }
 
+fn strip_label(kind: Kind, chans: &[usize]) -> String {
+    match chans {
+        [a, _] => pair_label(kind, a / 2),
+        [a, ..] => chan_label(kind, *a),
+        [] => String::new(),
+    }
+}
+
+fn out_strip_label(mix: &MixState, c: usize) -> String {
+    strip_label(Kind::Out, &mix.strip_channels(Kind::Out, c))
+}
+
+/// Strips in channel order: a linked pair is one entry with two channels, an
+/// unlinked channel is an entry of its own.
+fn channel_strips(mix: &MixState, kind: Kind, mode: u32) -> Vec<(usize, Vec<usize>)> {
+    let chans = channels(kind, mode);
+    let mut strips = Vec::new();
+    let mut i = 0usize;
+    while i < chans.len() {
+        let c = chans[i];
+        let linked = c % 2 == 0
+            && chans.get(i + 1) == Some(&(c + 1))
+            && stereo_flag(mix, kind, c / 2);
+        let take = if linked { 2 } else { 1 };
+        strips.push((c, chans[i..(i + take).min(chans.len())].to_vec()));
+        i += take;
+    }
+    strips
+}
+
+fn out_strips(mix: &MixState, mode: u32) -> Vec<(usize, Vec<usize>)> {
+    channel_strips(mix, Kind::Out, mode)
+}
+
+/// Strip channels for matrix editing: a linked channel maps to its pair.
+fn linked_strip(mix: &MixState, kind: Kind, c: usize) -> Vec<usize> {
+    let start = if c % 2 == 0 { c } else { c.saturating_sub(1) };
+    let chans = mix.strip_channels(kind, start);
+    if chans.len() == 2 && chans[0] == start {
+        chans
+    } else {
+        vec![c]
+    }
+}
+
+fn stereo_flag(mix: &MixState, kind: Kind, pair: usize) -> bool {
+    let flags = match kind {
+        Kind::In => &mix.stereo_in,
+        Kind::Play => &mix.stereo_play,
+        Kind::Out => &mix.stereo_out,
+    };
+    flags.get(pair).copied().unwrap_or(false)
+}
+
 fn matrix_cell_live(
     gains: &[[f32; N_SRC]; N_OUT],
     kind: Kind,
-    src_pair: usize,
-    out_pair: usize,
+    src_chans: &[usize],
+    out_chans: &[usize],
     source: &MeterSnapshot,
 ) -> f32 {
     let base = match kind {
@@ -2262,13 +2368,16 @@ fn matrix_cell_live(
         Kind::Play => N_IN,
         Kind::Out => return 0.0,
     };
-    let c0 = src_pair * 2;
     let mut peak = 0.0f32;
-    for c in [c0, c0 + 1] {
-        let src = base + c;
-        let level = source.level.get(c).copied().unwrap_or(0.0);
-        for out in [2 * out_pair, 2 * out_pair + 1] {
-            peak = peak.max(level * gains[out][src]);
+    for &src in src_chans {
+        if src >= N_SRC - base {
+            continue;
+        }
+        let level = source.level.get(src).copied().unwrap_or(0.0);
+        for &out in out_chans {
+            if out < N_OUT {
+                peak = peak.max(level * gains[out][base + src]);
+            }
         }
     }
     peak.clamp(0.0, 2.0)
@@ -2411,10 +2520,27 @@ fn checkbox(ui: &mut egui::Ui, value: &mut bool, label: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
 
     #[test]
-    fn cell_live_uses_source_base_and_both_output_legs() {
+    fn out_strips_split_when_unlinked() {
+        let mut mix = MixState::default();
+        mix.stereo_out[0] = false;
+        mix.stereo_out[2] = false;
+        let strips = out_strips(&mix, 1);
+        assert_eq!(strips[0], (0, vec![0]));
+        assert_eq!(strips[1], (1, vec![1]));
+        assert_eq!(strips[2], (2, vec![2, 3]));
+        assert_eq!(strips[3], (4, vec![4]));
+        assert_eq!(strips[4], (5, vec![5]));
+        assert_eq!(strips[5], (6, vec![6, 7]));
+        assert_eq!(strip_label(Kind::Out, &strips[0].1), "AN 1");
+        assert_eq!(strip_label(Kind::Out, &strips[2].1), "AN 3/4");
+    }
+
+    #[test]
+    fn cell_live_uses_source_base_and_channel_gains() {
         let mut source = MeterSnapshot {
             level: [0.0; N_OUT],
             hold: [0.0; N_OUT],
@@ -2423,9 +2549,11 @@ mod tests {
         source.level[0] = 0.5;
         let mut gains = [[0.0; N_SRC]; N_OUT];
         gains[0][0] = 0.25;
-        gains[1][N_IN] = 0.5;
+        gains[0][N_IN] = 0.5;
 
-        assert_eq!(matrix_cell_live(&gains, Kind::In, 0, 0, &source), 0.125);
-        assert_eq!(matrix_cell_live(&gains, Kind::Play, 0, 0, &source), 0.25);
+        assert_eq!(matrix_cell_live(&gains, Kind::In, &[0], &[0], &source), 0.125);
+        assert_eq!(matrix_cell_live(&gains, Kind::Play, &[0], &[0], &source), 0.25);
+        // A linked strip takes the loudest leg.
+        assert_eq!(matrix_cell_live(&gains, Kind::Play, &[0], &[0, 1], &source), 0.25);
     }
 }

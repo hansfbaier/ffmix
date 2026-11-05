@@ -5,7 +5,7 @@
 //! register notes; this module implements the decoding independently.
 
 use crate::ff800::{ClockSource, DeviceSettings, InLevel, Jack, OutLevel};
-use crate::model::{lin2db, OutPair, Send, N_IN, N_PAIRS, N_PLAY};
+use crate::model::{expand_sends, lin2db, OutMaster, Send, N_IN, N_OUT, N_PAIRS, N_PLAY};
 
 pub const SETTINGS_ADDR: u64 = 0x3000_f0000;
 pub const SETTINGS_WORDS: usize = 59;
@@ -23,9 +23,9 @@ const FADER_0DB: f32 = 0x8000 as f32;
 
 #[derive(Clone, Debug, Default)]
 pub struct FlashMixer {
-    pub sends_in: [[Send; N_PAIRS]; N_IN],
-    pub sends_play: [[Send; N_PAIRS]; N_PLAY],
-    pub out: [OutPair; N_PAIRS],
+    pub sends_in: [[Send; N_OUT]; N_IN],
+    pub sends_play: [[Send; N_OUT]; N_PLAY],
+    pub out: [OutMaster; N_OUT],
 }
 
 fn word(raw: &[u8], index: usize) -> u32 {
@@ -154,29 +154,33 @@ pub fn decode_mixer(volume: &[u8], pan: &[u8], hw: &[u8]) -> Result<FlashMixer, 
         return Err("short flash mixer block".to_owned());
     }
 
-    let mut mixer = FlashMixer::default();
+    let mut sends_in = [[Send::default(); N_PAIRS]; N_IN];
+    let mut sends_play = [[Send::default(); N_PAIRS]; N_PLAY];
+    let mut out = [OutMaster::default(); N_OUT];
     for op in 0..N_PAIRS {
         let input_base = op * 2 * FLASH_ROW;
         let playback_base = (op * 2 + 1) * FLASH_ROW;
         for c in 0..N_IN {
             let i = input_base + c;
-            mixer.sends_in[c][op] = flash_send(half(volume, i), half(pan, i));
+            sends_in[c][op] = flash_send(half(volume, i), half(pan, i));
         }
         for c in 0..N_PLAY {
             let i = playback_base + c;
-            mixer.sends_play[c][op] = flash_send(half(volume, i), half(pan, i));
+            sends_play[c][op] = flash_send(half(volume, i), half(pan, i));
         }
 
+        // The saved snapshot stores one fader per hardware output channel.
         let left = flash_vol_to_fader(half(hw, 2 * op));
         let right = flash_vol_to_fader(half(hw, 2 * op + 1));
-        let gain = left.max(right) / FADER_0DB;
-        mixer.out[op] = OutPair {
-            gain: lin2db(gain),
-            mute: false,
-        };
+        out[2 * op] = OutMaster { gain: lin2db(left / FADER_0DB), mute: false };
+        out[2 * op + 1] = OutMaster { gain: lin2db(right / FADER_0DB), mute: false };
     }
 
-    Ok(mixer)
+    Ok(FlashMixer {
+        sends_in: expand_sends(&sends_in),
+        sends_play: expand_sends(&sends_play),
+        out,
+    })
 }
 
 #[cfg(test)]
